@@ -1,5 +1,14 @@
-function errorFlag = StewartPlatformEqs(T,Phi)
-    
+function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, legRestingLength, platformRadius, plotBool, displayWarnings)
+    arguments
+        T
+        Phi
+        armLegRatio
+        platformBaseRatio
+        legRestingLength
+        platformRadius
+        plotBool = false
+        displayWarnings = false
+    end
     errorFlag = false;
     
     % inputs:
@@ -12,14 +21,15 @@ function errorFlag = StewartPlatformEqs(T,Phi)
     phi = Phi(1);
     theta = Phi(2);
     psi = Phi(3);
-    
-    % platform parameters
-    platformBaseRatio = 0.8;
+
+    % leg parameters
+    s = sqrt(legRestingLength^2 / (1+armLegRatio)); % length of rod
+    a = s * armLegRatio; % length of servo arm
     
     %% constants:
     % b[] distances to each leg, array of 3x1 location vectors
     % distance to each leg is 1
-    b1 = [1;0;0]; % ADD a name for length
+    b1 = [platformRadius;0;0]; % ADD a name for length
     legAngles = [-5,5,115,125,235,245];
     b = zeros(3,6);
     for i = 1:6
@@ -33,11 +43,6 @@ function errorFlag = StewartPlatformEqs(T,Phi)
         p(:,i) = rotz(defaultPlatformRotation) * p(:,i); % rotate top platform
     end
     p = circshift(p,[0 1]); % shift matrix to shift which legs connect to which joints
-    
-    % leg and arm dimensions
-    % minTotalLegLength = norm(P_base(:,1) - b(:,1));
-    s = 1; % length of rod
-    a = 0.2; % length of servo arm
     
     % servo specs
     servoRange = 180; % servo motor range of motion
@@ -83,7 +88,7 @@ function errorFlag = StewartPlatformEqs(T,Phi)
     T = [x;y;z+h0]; % location of platform
     
     % compute rotation matrix based on input angles
-    R = rotz(phi)*roty(theta)*rotx(psi);
+    R = rotz(psi)*roty(theta)*rotx(phi);
     
     % compute l_i of each leg
     l = (T + R*p) - b;
@@ -138,35 +143,40 @@ function errorFlag = StewartPlatformEqs(T,Phi)
     % re calculate platform position
     
     
-    
-% % %     %% plotting
-% % %     
-% % %     % make plotting arrays
-% % %     P_base_plot = P_base;
-% % %     P_base_plot(:,end+1) = P_base(:,1);
-% % %     b_plot = b;
-% % %     b_plot(:,end+1) = b_plot(:,1);
-% % %     
-% % %     plot3(P_base_plot(1,:),P_base_plot(2,:),P_base_plot(3,:),'-') % plot platform
-% % %     hold on
-% % %     plot3(b_plot(1,:),b_plot(2,:),b_plot(3,:),'-') % plot base
-% % %     axis equal
-% % %     
-% % %     % alpha = ones(1,6) * 0; % for entering manual alpha values
-% % %     servoArms = zeros(3,6);
-% % %     for i = 1:6
-% % %     %     plot3([b(1,i) P_base(1,i)], [b(2,i) P_base(2,i)], [b(3,i) P_base(3,i)]); % plot straight leg lengths
-% % %         servoArms(:,i) = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)) * [1; 0; 0]; % calculate arm positions
-% % %         plotVector(b(:,i), servoArms(:,i), 'red') % plot arm positions
-% % %         plotVector(servoArms(:,i), P_base(:,i),'green') % plot leg positions
-% % %     end
-% % %     
-% % %     % calculate desired leg lengths
-% % %     legLengths = P_base - servoArms;
-% % %     legLengthsNorm = zeros(1,6);
-% % %     for i = 1:6
-% % %        legLengthsNorm(i) = norm(legLengths(:,i));
-% % %     end
-% % % 
+    if plotBool == true
+        %% plotting
+        
+        % make plotting arrays
+        P_base_plot = P_base;
+        P_base_plot(:,end+1) = P_base(:,1);
+        b_plot = b;
+        b_plot(:,end+1) = b_plot(:,1);
+        
+        plot3(P_base_plot(1,:),P_base_plot(2,:),P_base_plot(3,:),'-') % plot platform
+        hold on
+        plot3(b_plot(1,:),b_plot(2,:),b_plot(3,:),'-') % plot base
+        axis equal
+        
+        % alpha = ones(1,6) * 0; % for entering manual alpha values
+        servoArms = zeros(3,6);
+        for i = 1:6
+        %     plot3([b(1,i) P_base(1,i)], [b(2,i) P_base(2,i)], [b(3,i) P_base(3,i)]); % plot straight leg lengths
+            servoArms(:,i) = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)) * [1; 0; 0]; % calculate arm positions
+            plotVector(b(:,i), servoArms(:,i), 'black') % plot arm positions
+            plotVector(servoArms(:,i), P_base(:,i),'green') % plot leg positions
+        end
+        
 
+    end
+
+    %% verify model values
+            % calculate desired leg lengths
+        legLengths = P_base - servoArms;
+        legLengthsNorm = zeros(1,6);
+        for i = 1:6
+           legLengthsNorm(i) = norm(legLengths(:,i));
+        end
+    if abs(legLengthsNorm(1) -s) > 0.1 && displayWarnings == true
+        warning("legs are changing lengths")
+    end
 end
