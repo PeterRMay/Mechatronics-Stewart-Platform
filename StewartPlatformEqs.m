@@ -1,4 +1,4 @@
-function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, legRestingLength, platformRadius, plotBool, displayWarnings)
+function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, legRestingLength, platformRadius, servoMotorRange, plotBool, displayWarnings)
     arguments
         T
         Phi
@@ -6,6 +6,7 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
         platformBaseRatio
         legRestingLength
         platformRadius
+        servoMotorRange
         plotBool = false
         displayWarnings = false
     end
@@ -44,9 +45,6 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     end
     p = circshift(p,[0 1]); % shift matrix to shift which legs connect to which joints
     
-    % servo specs
-    servoRange = 180; % servo motor range of motion
-    
     % define home location
     beta = zeros(1,6); % angle between servo arm and x axis in the xy plane
     % we add or subtract 90 to place servos arms perpendicular to vector
@@ -81,8 +79,8 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     % calculate maximum ranges of motion
     l_max = s + a;
     % l_min = 
-    alpha_max = servoCenterOfRange + servoRange/2;
-    alpha_min = servoCenterOfRange - servoRange/2;
+    alpha_max = servoCenterOfRange + servoMotorRange/2;
+    alpha_min = servoCenterOfRange - servoMotorRange/2;
     
     %% Calculate outputs
     T = [x;y;z+h0]; % location of platform
