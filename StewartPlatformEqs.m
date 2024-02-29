@@ -29,12 +29,12 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     
     %% constants:
     % b[] distances to each leg, array of 3x1 location vectors
-    % distance to each leg is 1
     b1 = [platformRadius;0;0]; % ADD a name for length
-    legAngles = [-5,5,115,125,235,245];
+    legAngles = [-5,5,115,125,235,245] + 120; %% IMPORTANT: added 270 to match up axes with fwd kinematics
+    legAngles = circshift(legAngles,[0 1]);
     b = zeros(3,6);
     for i = 1:6
-        b(:,i) = rotz(legAngles(:,i))*b1;
+        b(:,i) = rotz(legAngles(i))*b1;
     end
     
     % p[] distances from origin of platform to the joints
@@ -45,7 +45,7 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     end
     p = circshift(p,[0 1]); % shift matrix to shift which legs connect to which joints
     
-    % define home location
+    %% define home location
     beta = zeros(1,6); % angle between servo arm and x axis in the xy plane
     % we add or subtract 90 to place servos arms perpendicular to vector
     % through the center of the platform. This can be adjusted based on
@@ -163,8 +163,16 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
             plotVector(b(:,i), servoArms(:,i), 'black') % plot arm positions
             plotVector(servoArms(:,i), P_base(:,i),'green') % plot leg positions
         end
-        
+        %plot servo circle
+        for q = 1:360
+        servoArms1 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q-1) * [1; 0; 0];
+        servoArms2 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q) * [1; 0; 0];
+        plotVector(servoArms1,servoArms2,'blue')
+        end
 
+        xlabel('x')
+        ylabel('y')
+        zlabel('z')
     end
 
     %% verify model values
