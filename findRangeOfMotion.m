@@ -1,84 +1,186 @@
 clear all; close all; clc;
+%% initialize standard values
+stdPlatformBaseRatio = 0.5;
+stdArmLegRatio = 0.1495;
+stdRestingLegLength = 11/12;
 
-ArmLegRatio = 1/10;
-PlatformBaseRatio = 0.5;
-PlatformRadius = 1;
-RestingLegLength = 1;
-TRange = zeros(3,2);
-PhiRange = zeros(3,2);
-servoMotorRange = 180;
+%% test
+% platformParams = struct;
+% platformParams.armlegratio = stdArmLegRatio;
+% platformParams.platformbaseratio = stdPlatformBaseRatio;
+% platformParams.radius = 1;
+% platformParams.restingleglength = stdRestingLegLength;
+% platformParams.servorange = 180;
+% [trange,phirange] = findROM(platformParams, true);
 
-testRange = linspace(-40,40,1000);
+%% find optimal armlegratio
+clc; clear platformParams
+platformParams = struct;
+platformParams.armlegratio = stdArmLegRatio;
+platformParams.platformbaseratio = stdPlatformBaseRatio;
+platformParams.radius = 1;
+platformParams.restingleglength = stdRestingLegLength;
+platformParams.servorange = 180;
 
-for q = 1:6
-    if q <4
-        currentError = true;
-        previousError = true;
-        T = zeros(3,1);
-        Phi = zeros(3,1);
-        minValue = NaN(1);
-        maxValue = NaN(1);
+n = 20;
+minratio = 0.10;
+maxratio = 1;
+ratioRange = linspace(minratio, maxratio, n);
+% note, arm/leg ratio is related to servo arm length
+% by a = ratio*9.4847
 
-        for i = 1:length(testRange)
-            T(q) = testRange(i);
-            currentError = StewartPlatformEqs(T, Phi, ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange);
-            if previousError == true && currentError == false % transition from out of range to in range
-                
-                minValue = testRange(i);
-            end
-            if previousError == false && currentError == true % transition into range
-              
-                maxValue = testRange(i);
-            end
-            previousError = currentError;
-        end
-        if isnan(minValue)
-            error("min bound not exceeded, decrease lower bound of testing range")
-%         elseif isnan(maxValue)
-%             error("max bound not exceeded, increase upper bound of testing range")
-        end
-        TRange(q,:) = [minValue maxValue];
-        
+tranges = zeros(3,2,n);
+phiranges = tranges;
+xrange = zeros(1,n);
+yrange = xrange;
+zrange = xrange;
+rollrange = xrange;
+pitchrange = xrange;
+yawrange = xrange;
 
-    else
-        currentError = true;
-        previousError = true;
-        T = zeros(3,1);
-        Phi = zeros(3,1);
-        minValue = NaN(1);
-        maxValue = NaN(1);
-        for i = 1:length(testRange)
-            Phi(q-3) = testRange(i);
-            currentError = StewartPlatformEqs(T, Phi, ArmLegRatio, PlatformBaseRatio, RestingLegLength, PlatformRadius, servoMotorRange);
-            if previousError == true && currentError == false % transition from out of range to in range
-                minValue = testRange(i);
-            end
-            if previousError == false && currentError == true % transition into range
-                maxValue = testRange(i);
-            end
-            previousError = currentError;
-        end
-        if isnan(minValue)
-            error("decrease lower bound of testing range")
-%         elseif isnan(maxValue)
-%             error("increase upper bound of testing range")
-        end
-       PhiRange(q-3,:) = [minValue maxValue];
-    end
-    
+inchesPerPlatform = 12;
+
+servoArmLength = zeros(1,n);
+LinkageLength = zeros(1,n);
+
+for i = 1:n
+    platformParams.armlegratio = ratioRange(i);
+    [tranges(:,:,i),phiranges(:,:,i)] = findROM(platformParams);
+    xrange(i) = inchesPerPlatform.*(tranges(1,2,i) - tranges(1,1,i));
+    yrange(i) = inchesPerPlatform.*(tranges(2,2,i) - tranges(2,1,i));
+    zrange(i) = inchesPerPlatform.*(tranges(3,2,i) - tranges(3,1,i));
+    rollrange(i) = phiranges(1,2,i) - phiranges(1,1,i);
+    pitchrange(i) = phiranges(2,2,i) - phiranges(2,1,i);
+    yawrange(i) = phiranges(3,2,i) - phiranges(3,1,i);
+
+    % leg parameters, pulled from stewartplatformeqs
+    LinkageLength(i) = sqrt(platformParams.restingleglength^2 / (1+platformParams.armlegratio)); % length of rod
+    servoArmLength(i) = inchesPerPlatform.*(LinkageLength(i) * platformParams.armlegratio);
+    LinkageLength(i) = inchesPerPlatform.*LinkageLength(i);% length of servo arm
 end
 
-TRange
-PhiRange
-subplot(2,2,1)
-StewartPlatformEqs([0 0 TRange(3,2)], [0 0 0], ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true);
-title('Max height')
-subplot(2,2,2)
-StewartPlatformEqs([0 0 TRange(3,1)], [0 0 0], ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true);
-title('Min height')
-subplot(2,2,3)
-StewartPlatformEqs([0 0 0], [PhiRange(1,2) 0 0], ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true);
-title('Max pitch')
-subplot(2,2,4)
-StewartPlatformEqs([0 0 0], [PhiRange(1,1) 0 0], ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true);
-title('Min pitch')
+Trange = [xrange; rollrange; yrange; pitchrange; zrange; yawrange];
+labels = ["x", "roll", "y", "pitch", "z", "yaw"];
+units = ["in", "deg", "in", "deg","in", "deg",];
+figure
+for i = 1:6
+subplot(3,2,i)
+plot(servoArmLength,Trange(i,:))
+title(labels(i))
+xlabel("arm length (in)")
+ylabel(units(i))
+end
+sgtitle("Range of motion for varying arm/leg ratios")
+
+
+%% find optimal platform size
+clc; clear platformParams
+platformParams = struct;
+platformParams.armlegratio = stdArmLegRatio;
+platformParams.platformbaseratio = stdPlatformBaseRatio;
+platformParams.radius = 1;
+platformParams.restingleglength = stdRestingLegLength;
+platformParams.servorange = 180;
+n = 20;
+minratio = 4/10;
+maxratio = 1;
+ratioRange = linspace(minratio, maxratio, n);
+
+tranges = zeros(3,2,n);
+phiranges = tranges;
+xrange = zeros(1,n);
+yrange = xrange;
+zrange = xrange;
+rollrange = xrange;
+pitchrange = xrange;
+yawrange = xrange;
+
+inchesPerPlatform = 12;
+
+servoArmLength = zeros(1,n);
+LinkageLength = zeros(1,n);
+
+for i = 1:n
+    platformParams.platformbaseratio = ratioRange(i);
+    [tranges(:,:,i),phiranges(:,:,i)] = findROM(platformParams);
+    xrange(i) = inchesPerPlatform.*(tranges(1,2,i) - tranges(1,1,i));
+    yrange(i) = inchesPerPlatform.*(tranges(2,2,i) - tranges(2,1,i));
+    zrange(i) = inchesPerPlatform.*(tranges(3,2,i) - tranges(3,1,i));
+    rollrange(i) = phiranges(1,2,i) - phiranges(1,1,i);
+    pitchrange(i) = phiranges(2,2,i) - phiranges(2,1,i);
+    yawrange(i) = phiranges(3,2,i) - phiranges(3,1,i);
+
+    % leg parameters, pulled from stewartplatformeqs
+    LinkageLength(i) = sqrt(platformParams.restingleglength^2 / (1+platformParams.armlegratio)); % length of rod
+    servoArmLength(i) = inchesPerPlatform.*(LinkageLength(i) * platformParams.armlegratio);
+    LinkageLength(i) = inchesPerPlatform.*LinkageLength(i);% length of servo arm
+end
+
+Trange = [xrange; rollrange; yrange; pitchrange; zrange; yawrange];
+labels = ["x", "roll", "y", "pitch", "z", "yaw"];
+units = ["in", "deg", "in", "deg","in", "deg",];
+figure
+for i = 1:6
+subplot(3,2,i)
+plot(ratioRange.*inchesPerPlatform,Trange(i,:))
+title(labels(i))
+xlabel("platform size (in)")
+ylabel(units(i))
+end
+sgtitle("Range of motion for varying platform/base ratios")
+
+%% find optimal platform resting height
+clear platformParams; clc;
+platformParams = struct;
+platformParams.armlegratio = stdArmLegRatio;
+platformParams.platformbaseratio = stdPlatformBaseRatio;
+platformParams.radius = 1;
+platformParams.restingleglength = stdRestingLegLength;
+platformParams.servorange = 180;
+n = 20;
+minratio = 0.9;
+maxratio = 1.1;
+ratioRange = linspace(minratio, maxratio, n);
+
+tranges = zeros(3,2,n);
+phiranges = tranges;
+xrange = zeros(1,n);
+yrange = xrange;
+zrange = xrange;
+rollrange = xrange;
+pitchrange = xrange;
+yawrange = xrange;
+
+inchesPerPlatform = 12;
+
+servoArmLength = zeros(1,n);
+LinkageLength = zeros(1,n);
+
+for i = 1:n
+    platformParams.restingleglength = ratioRange(i);
+    [tranges(:,:,i),phiranges(:,:,i)] = findROM(platformParams);
+    xrange(i) = inchesPerPlatform.*(tranges(1,2,i) - tranges(1,1,i));
+    yrange(i) = inchesPerPlatform.*(tranges(2,2,i) - tranges(2,1,i));
+    zrange(i) = inchesPerPlatform.*(tranges(3,2,i) - tranges(3,1,i));
+    rollrange(i) = phiranges(1,2,i) - phiranges(1,1,i);
+    pitchrange(i) = phiranges(2,2,i) - phiranges(2,1,i);
+    yawrange(i) = phiranges(3,2,i) - phiranges(3,1,i);
+
+    % leg parameters, pulled from stewartplatformeqs
+    LinkageLength(i) = sqrt(platformParams.restingleglength^2 / (1+platformParams.armlegratio)); % length of rod
+    servoArmLength(i) = inchesPerPlatform.*(LinkageLength(i) * platformParams.armlegratio);
+    LinkageLength(i) = inchesPerPlatform.*LinkageLength(i);% length of servo arm
+end
+
+Trange = [xrange; rollrange; yrange; pitchrange; zrange; yawrange];
+labels = ["x", "roll", "y", "pitch", "z", "yaw"];
+units = ["in", "deg", "in", "deg","in", "deg",];
+figure
+for i = 1:6
+subplot(3,2,i)
+plot(ratioRange.*inchesPerPlatform,Trange(i,:))
+title(labels(i))
+xlabel("resting leg length (in)")
+ylabel(units(i))
+end
+sgtitle("Range of motion for varying resting leg lengths")

@@ -1,4 +1,4 @@
-function [P_base] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0)
+function [P_base, d] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0)
     
     average = @(a,b) (a+b)./2;
 
@@ -44,7 +44,10 @@ function [P_base] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0)
     testFunction(X0)
 
     costFunction = @(X) [f1(a,Xp,X,h); f2(a,Xp,X,h); f3(a,Xp,X,h)];
-    [X, Fval] = fsolve(costFunction,X0);
+    options = optimoptions(@fsolve,'Algorithm','levenberg-marquardt');
+    [X, ~] = fsolve(costFunction, X0, options);
+    
+
 %     cost = 1;
 %     for i = 1:400 
 %         [X,cost] = fminsearch(costFunction,P0(1,:));
@@ -67,7 +70,10 @@ function [P_base] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0)
     Z(2) = eq30(h,X,Xp);
     Z(3) = eq31(h,X,Xp);
     
-    P_base = [X;Y;Z];
+    l_2norm
+    P0
+    P_base = [X;Y;Z]
+    
 
     % apply newton's method
     % take the jacobian of the column vector of the three equations

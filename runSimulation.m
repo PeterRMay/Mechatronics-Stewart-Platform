@@ -14,8 +14,8 @@ onesSignal = ones(3,n);
 sineSignal = onesSignal;
 cosineSignal = onesSignal;
 for i = 1:length(sineSignal)
-    sineSignal(:,i) = sineSignal(:,i) * sind(i*5);
-    cosineSignal(:,i) = cosineSignal(:,i) * cosd(i*5);
+    sineSignal(:,i) = sineSignal(:,i) * sind(i*1);
+    cosineSignal(:,i) = cosineSignal(:,i) * cosd(i*1);
 end
 
 % system inputs (should usually be 0)
@@ -25,9 +25,11 @@ Phi_base = nullTimeseries;
 
 % system disturbances (these should be signals)
 % these are measurements from IMU/Encoders
-T_inertial_signal = sineSignal .* [2;0;0];
+% T_inertial_signal = sineSignal .* [2;0;0];
+T_inertial_signal = nullSignal;
 T_inertial = timeseries(T_inertial_signal,t);
 Phi_inertial_signal = sineSignal .* [0;10;0] + cosineSignal.*[10;0;0];
+% Phi_inertial_signal = nullSignal;
 Phi_inertial = timeseries(Phi_inertial_signal,t);
 
 %% ------------------SYSTEM CONSTANTS----------------------
@@ -47,11 +49,13 @@ s = sqrt(restingLegLength^2 / (1+armLegRatio)); % length of rod
 a = s * armLegRatio; % length of servo arm
 
 % B[] distances to each leg, array of 3x1 location vectors
+% b[] distances to each leg, array of 3x1 location vectors
 B1 = [platformRadius;0;0]; % ADD a name for length
-legAngles = [-5,5,115,125,235,245];
+legAngles = [-5,5,115,125,235,245] + 120; %% IMPORTANT: added 120 to match up axes with fwd kinematics
+legAngles = circshift(legAngles,[0 1]);
 B = zeros(3,6);
 for i = 1:6
-    B(:,i) = rotz(legAngles(:,i))*B1;
+    B(:,i) = rotz(legAngles(i))*B1;
 end
 
 % P[] distances from origin of platform to the joints
@@ -70,10 +74,10 @@ beta = zeros(1,6); % angle between servo arm and x axis in the xy plane
 % through the center of the platform. This can be adjusted based on
 % construction
 for i = 1:2:6
-    beta(i) = legAngles(i) - 90; % note this differs from the document, in the document beta is only for even legs
+    beta(i) = legAngles(i) + 90; % note this differs from the document, in the document beta is only for even legs
 end
 for i = 2:2:6
-    beta(i) = legAngles(i) + 90;
+    beta(i) = legAngles(i) - 90;
 end
 
 % we now define the home height, h0, assuming 90 degrees between the arms
@@ -84,6 +88,7 @@ if isreal(h0) ~= true
 %         warning("Legs too short given platform dimensions")
     errorFlag = true;
 end
+defaultLegs = sqrt(l0_squared) .* ones(6,1);
 
 % next we define the home position of the servo motors
 % this is a function purely of the desired default platform location and
@@ -92,6 +97,11 @@ Tdefault = [0;0;h0];
 P_default = Tdefault + P;
 alpha0 = ones(1,6) * servoCalc(P_default(:,1),B(:,1),sqrt(l0_squared),s,a,beta(1));
 alpha0 = alpha0';
+% calculate home servo position matrix
+A0 = zeros(3,6);
+for i = 1:6
+    A0(:,i) = B(:,i) + a * rotz(beta(i)) * roty(-alpha0(i)) * [1; 0; 0]; % calculate arm positions
+end
 
 % set center of range of motion equal to alpha0
 servoCenterOfRange = alpha0(1); % center of range of motion
@@ -101,6 +111,8 @@ l_max = s + a;
 % l_min = 
 alpha_max = servoCenterOfRange + servoMotorRange/2;
 alpha_min = servoCenterOfRange - servoMotorRange/2;
+
+
 
 
 %% ------------------SIMULINK--------------------
@@ -118,7 +130,7 @@ commandedPosition = SimOut.commandedPosition.Data;
 
 
 
-% %% -------------------PLOTTING----------------
+%% -------------------PLOTTING----------------
 
 video_filename = 'stewartplatformNew.avi';
 n_pad_frames = 20; % number of starting/ending pad frames
@@ -214,6 +226,14 @@ else
             plotVector(b_plot(:,i), servoArms(:,i), 'black') % plot arm positions
             plotVector(servoArms(:,i), P_base_plot(:,i),'green') % plot leg positions
         end
+    
+        screen = linspace(alpha_min,alpha_max);
+        for z = 2:length(screen)
+            servoArms1 = R_Phi_inertial *(B(:,i) + a * rotz(beta(i)) * roty(-screen(z-1)) * [1; 0; 0]);
+            servoArms2 = R_Phi_inertial *(B(:,i) + a * rotz(beta(i)) * roty(-screen(z)) * [1; 0; 0]);
+            plotVector(servoArms1,servoArms2,'blue')
+        end
+
         view(45,10)
 end
 
