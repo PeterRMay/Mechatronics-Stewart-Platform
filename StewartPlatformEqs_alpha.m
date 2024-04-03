@@ -1,4 +1,4 @@
-function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, legRestingLength, platformRadius, servoMotorRange, plotBool, displayWarnings)
+function alpha = StewartPlatformEqs_alpha(T,Phi, armLegRatio, platformBaseRatio, legRestingLength, platformRadius, servoMotorRange, plotBool, displayWarnings)
     arguments
         T
         Phi
