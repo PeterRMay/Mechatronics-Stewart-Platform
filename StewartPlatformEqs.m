@@ -102,7 +102,7 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     
     % limit l values
     for i = 1:6
-        if norm(l(:,i)) > l_max
+        if l_2norm(i) > l_max
 %             warning("Position not possible, exceeded max leg length")
             errorFlag = true;
             l(:,i) = l_unit(:,i) * l_max;
@@ -164,11 +164,11 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
             plotVector(servoArms(:,i), P_base(:,i),'green') % plot leg positions
         end
         %plot servo circle
-%         for q = 1:360
-%         servoArms1 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q-1) * [1; 0; 0];
-%         servoArms2 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q) * [1; 0; 0];
-%         plotVector(servoArms1,servoArms2,'blue')
-%         end
+        for q = 1:360
+        servoArms1 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q-1) * [1; 0; 0];
+        servoArms2 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q) * [1; 0; 0];
+        plotVector(servoArms1,servoArms2,'blue')
+        end
 %% plot servo range
 %         screen = linspace(alpha_min,alpha_max);
 %         for q = 2:length(screen)
