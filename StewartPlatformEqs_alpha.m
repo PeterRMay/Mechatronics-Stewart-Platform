@@ -61,6 +61,7 @@ function alpha = StewartPlatformEqs_alpha(T,Phi, armLegRatio, platformBaseRatio,
     % and legs and no rotation or translational inputs
     l0_squared = s^2+a^2; %default leg length using pythagoras theorem bc right angles
     h0 = sqrt(l0_squared - (p(1,1) - b(1,1))^2 - (p(2,1) - b(2,1))^2) - p(3,1);
+    h0
     if isreal(h0) ~= true
 %         warning("Legs too short given platform dimensions")
         errorFlag = true;
