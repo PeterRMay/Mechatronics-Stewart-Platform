@@ -155,7 +155,7 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
         plot3(b_plot(1,:),b_plot(2,:),b_plot(3,:),'-') % plot base
         axis equal
         
-        % alpha = ones(1,6) * 0; % for entering manual alpha values
+        
         servoArms = zeros(3,6);
         for i = 1:6
         %     plot3([b(1,i) P_base(1,i)], [b(2,i) P_base(2,i)], [b(3,i) P_base(3,i)]); % plot straight leg lengths

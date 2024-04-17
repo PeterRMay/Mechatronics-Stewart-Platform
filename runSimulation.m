@@ -28,8 +28,8 @@ Phi_base = nullTimeseries;
 % T_inertial_signal = sineSignal .* [2;0;0];
 T_inertial_signal = nullSignal;
 T_inertial = timeseries(T_inertial_signal,t);
-Phi_inertial_signal = sineSignal .* [0;10;0] + cosineSignal.*[10;0;0];
-% Phi_inertial_signal = nullSignal;
+% Phi_inertial_signal = sineSignal .* [0;10;0] + cosineSignal.*[10;0;0];
+Phi_inertial_signal = nullSignal;
 Phi_inertial = timeseries(Phi_inertial_signal,t);
 
 %% ------------------SYSTEM CONSTANTS----------------------

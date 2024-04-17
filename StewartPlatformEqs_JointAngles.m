@@ -139,6 +139,9 @@ function jointAngles = StewartPlatformEqs_JointAngles(T,Phi, armLegRatio, platfo
     end
     
     % re calculate platform position
+
+    %
+    
     
     
     if plotBool == true
@@ -195,5 +198,10 @@ function jointAngles = StewartPlatformEqs_JointAngles(T,Phi, armLegRatio, platfo
         end
     if abs(legLengthsNorm(1) -s) > 0.1 && displayWarnings == true
         warning("legs are changing lengths")
+    end
+    
+    jointAngles = zeros(1,6);
+    for i = 1:6
+        jointAngles(i) = angleBetweenVectors(-b(:,i), legLengths(:,i));
     end
 end

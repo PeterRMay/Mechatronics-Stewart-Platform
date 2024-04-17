@@ -1,4 +1,4 @@
-function [P_base, d] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0)
+function [P_base, d] = forwardKinematics_average6(baseJoints, platformJoints, l_2norm, P0)
     
     average = @(a,b) (a+b)./2;
 
@@ -9,7 +9,7 @@ function [P_base, d] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0
     p = zeros(1,3);%calculate p_i, distance from odd leg to projection of platform
     %joint position on base
     h = zeros(1,3); % height of platform joint
-    for i = 1:3 
+    for i = 1:3
         p(i) = (1/(2*b)) * (b.^2 + l_2norm(2*i-1).^2 - l_2norm(2*i)^2); 
         h(i) = sqrt(l_2norm(2*i-1).^2 - p(i).^2);
     end
@@ -34,15 +34,12 @@ function [P_base, d] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0
     testFunction = @(X) f1(a,Xp,X,h);
     
 
-    sizeP0 = size(P0);
+    
     X0 = zeros(1,3);
-    if sizeP0(2) == 6
-        X0(1) = average(P0(1,2),P0(1,1));
-        X0(2) = average(P0(1,4),P0(1,3));
-        X0(3) = average(P0(1,5),P0(1,6));
-    else
-        X0 = P0(1,:);
-    end
+    
+    X0(1) = average(P0(1,2),P0(1,1));
+    X0(2) = average(P0(1,4),P0(1,3));
+    X0(3) = average(P0(1,5),P0(1,6));
    
     testFunction(X0)
 
@@ -73,9 +70,9 @@ function [P_base, d] = forwardKinematics(baseJoints, platformJoints, l_2norm, P0
     Z(2) = eq30(h,X,Xp);
     Z(3) = eq31(h,X,Xp);
     
-%     l_2norm
-%     P0
-    P_base = [X;Y;Z];
+    l_2norm
+    P0
+    P_base = [X;Y;Z]
     
 
     % apply newton's method

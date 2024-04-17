@@ -1,4 +1,5 @@
 function [P_base] = find6P(P,d)
+
 P1 = P(:,1);
 P2 = P(:,2);
 P3 = P(:,3);
