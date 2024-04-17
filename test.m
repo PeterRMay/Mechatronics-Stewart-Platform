@@ -1,14 +1,14 @@
 clc
 close
-T = [0;0;0];
-Phi = [10;0;0];
-ArmLegRatio = 1/10;
+T = [0;0;-0.8571];
+Phi = [0;0;0];
+ArmLegRatio = 3/10;
 PlatformBaseRatio = 0.5;
 RestingLegLength = 1;
 PlatformRadius = 1;
 servoMotorRange = 180;
 set(groot,'DefaultLineLineWidth',1.5)
-StewartPlatformEqs(T,Phi, ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true);
+StewartPlatformEqs(T,Phi, ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true)
 
 %% range of motion test
 stdPlatformBaseRatio = 0.5;
