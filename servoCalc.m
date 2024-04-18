@@ -1,5 +1,14 @@
 function [alpha] = servoCalc(P_base_i,B_i,l,s,a,beta,maxAlphaRange,minAlphaRange)
-    
+    arguments
+        P_base_i
+        B_i
+        l
+        s
+        a
+        beta
+        maxAlphaRange = 31
+        minAlphaRange = -128
+    end
     L = l^2 - (s^2 - a^2);
     M = 2*a*(P_base_i(3)-B_i(3));
     N = 2*a*(cosd(beta)*(P_base_i(1)-B_i(1)) + sind(beta)*(P_base_i(2)-B_i(2)));
