@@ -1,17 +1,22 @@
-function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, legRestingLength, platformRadius, servoMotorRange, plotBool, displayWarnings)
+function errorFlag = StewartPlatformEqs_JointAngles(T,Phi, platformParams, plotBool, displayWarnings)
     arguments
         T
         Phi
-        armLegRatio
-        platformBaseRatio
-        legRestingLength
-        platformRadius
-        servoMotorRange
+        platformParams
         plotBool = false
         displayWarnings = false
     end
     errorFlag = false;
     
+    armLegRatio = platformParams.armlegratio;
+    platformBaseRatio = platformParams.platformbaseratio;
+    legRestingLength = platformParams.restingleglength;
+    platformRadius = platformParams.radius;
+    servoMotorRange = platformParams.servorange;
+    servoOffset = platformParams.servoOffset;
+    ballJointRange = platformParams.ballJointRange;
+    angleBetweenLegPairs = platformParams.angleBetweenLegPairs;
+
     % inputs:
     % x, y, z relative displacements into T matrix
     x = T(1);
@@ -30,7 +35,8 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     %% constants:
     % b[] distances to each leg, array of 3x1 location vectors
     b1 = [platformRadius;0;0]; % ADD a name for length
-    legAngles = [-5,5,115,125,235,245] + 120; %% IMPORTANT: added 120 to match up axes with fwd kinematics
+    angleFromAxis = angleBetweenLegPairs / 2;
+    legAngles = [-angleFromAxis,angleFromAxis,120-angleFromAxis,120+angleFromAxis,240-angleFromAxis,240+angleFromAxis] + 120; %% IMPORTANT: added 120 to match up axes with fwd kinematics
     legAngles = circshift(legAngles,[0 1]);
     b = zeros(3,6);
     for i = 1:6
@@ -51,10 +57,10 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     % through the center of the platform. This can be adjusted based on
     % construction
     for i = 1:2:6
-        beta(i) = legAngles(i) + 90; % note this differs from the document, in the document beta is only for even legs
+        beta(i) = legAngles(i) + servoOffset; % note this differs from the document, in the document beta is only for even legs
     end
     for i = 2:2:6
-        beta(i) = legAngles(i) - 90;
+        beta(i) = legAngles(i) - servoOffset;
     end
     
     % we now define the home height, h0, assuming 90 degrees between the arms
@@ -139,6 +145,9 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
     end
     
     % re calculate platform position
+
+    %
+    
     
     
     if plotBool == true
@@ -155,20 +164,21 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
         plot3(b_plot(1,:),b_plot(2,:),b_plot(3,:),'-') % plot base
         axis equal
         
-        
+        % alpha = ones(1,6) * 0; % for entering manual alpha values
         servoArms = zeros(3,6);
         for i = 1:6
         %     plot3([b(1,i) P_base(1,i)], [b(2,i) P_base(2,i)], [b(3,i) P_base(3,i)]); % plot straight leg lengths
             servoArms(:,i) = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)) * [1; 0; 0]; % calculate arm positions
             plotVector(b(:,i), servoArms(:,i), 'black') % plot arm positions
             plotVector(servoArms(:,i), P_base(:,i),'green') % plot leg positions
-        end
+        end        
+
         %plot servo circle
-        for q = 1:360
-        servoArms1 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q-1) * [1; 0; 0];
-        servoArms2 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q) * [1; 0; 0];
-        plotVector(servoArms1,servoArms2,'blue')
-        end
+%         for q = 1:360
+%         servoArms1 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q-1) * [1; 0; 0];
+%         servoArms2 = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)+q) * [1; 0; 0];
+%         plotVector(servoArms1,servoArms2,'blue')
+%         end
 %% plot servo range
 %         screen = linspace(alpha_min,alpha_max);
 %         for q = 2:length(screen)
@@ -192,5 +202,18 @@ function errorFlag = StewartPlatformEqs(T,Phi, armLegRatio, platformBaseRatio, l
         end
     if abs(legLengthsNorm(1) -s) > 0.1 && displayWarnings == true
         warning("legs are changing lengths")
+    end
+    
+    jointAngles = zeros(1,6);
+    x_servo = zeros(3,6);
+    for i = 1:3
+        x_servo(:,i*2-1) = rotz(beta(i*2-1)-90)*[1;0;0];
+        x_servo(:,i*2) = rotz(beta(i*2)+90)*[1;0;0];
+    end
+    for i = 1:6
+        jointAngles(i) = 90 - angleBetweenVectors(-x_servo(:,i), legLengths(:,i));
+        if jointAngles(i) > ballJointRange
+            errorFlag = true;
+        end
     end
 end

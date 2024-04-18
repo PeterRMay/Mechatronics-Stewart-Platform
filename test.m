@@ -1,14 +1,31 @@
 clc
 close
-T = [0;0;-0.8571];
+T = [0;0;0];
 Phi = [0;0;0];
-ArmLegRatio = 3/10;
-PlatformBaseRatio = 0.5;
-RestingLegLength = 1;
-PlatformRadius = 1;
-servoMotorRange = 180;
+
+stdPlatformBaseRatio = 1/2;
+stdArmLegRatio = 0.1495;
+stdRestingLegLength = 11;
+stdRadius = 6;
+stdServoRange = 180;
+stdServoOffset = 120;
+stdBallJointRange = 25/2;
+stdAngleBetweenLegPairs = 30;
+
+platformParams = struct;
+platformParams.armlegratio = stdArmLegRatio;
+platformParams.platformbaseratio = stdPlatformBaseRatio;
+platformParams.radius = stdRadius;
+platformParams.restingleglength = stdRestingLegLength;
+platformParams.servorange = stdServoRange;
+platformParams.servoOffset = stdServoOffset;
+platformParams.ballJointRange = stdBallJointRange;
+platformParams.angleBetweenLegPairs = stdAngleBetweenLegPairs;
+platformParams.defaultHeight = findh0(platformParams);
+
 set(groot,'DefaultLineLineWidth',1.5)
-StewartPlatformEqs(T,Phi, ArmLegRatio, PlatformBaseRatio,RestingLegLength, PlatformRadius, servoMotorRange, true, true)
+%%
+StewartPlatformEqs(T,Phi, platformParams, true, true)
 
 %% range of motion test
 stdPlatformBaseRatio = 0.5;
