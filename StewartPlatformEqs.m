@@ -201,7 +201,7 @@ function errorFlag = StewartPlatformEqs_JointAngles(T,Phi, platformParams, plotB
            legLengthsNorm(i) = norm(legLengths(:,i));
         end
     if abs(legLengthsNorm(1) -s) > 0.1 && displayWarnings == true
-        warning("legs are changing lengths")
+%         warning("legs are changing lengths")
     end
     
     jointAngles = zeros(1,6);
@@ -212,7 +212,7 @@ function errorFlag = StewartPlatformEqs_JointAngles(T,Phi, platformParams, plotB
     end
     for i = 1:6
         jointAngles(i) = 90 - angleBetweenVectors(-x_servo(:,i), legLengths(:,i));
-        if jointAngles(i) > ballJointRange
+        if abs(jointAngles(i)) > ballJointRange
             errorFlag = true;
         end
     end

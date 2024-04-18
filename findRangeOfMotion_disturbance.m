@@ -1,14 +1,16 @@
 clear all; close all; clc;
 
 %% initialize standard values
-stdPlatformBaseRatio = 1/2;
-stdArmLegRatio = 0.1495;
+stdPlatformBaseRatio = 1;
+stdArmLegRatio = 0.15;
 stdRestingLegLength = 11;
-stdRadius = 6;
+stdRadius = 7;
 stdServoRange = 180;
-stdServoOffset = 120;
+stdServoOffset = 100;
 stdBallJointRange = 25/2;
-stdAngleBetweenLegPairs = 30;
+stdAngleBetweenLegPairs = 60;
+
+a = 2;
 
 stdPlatformParams = struct;
 stdPlatformParams.armlegratio = stdArmLegRatio;
@@ -23,11 +25,15 @@ stdPlatformParams.defaultHeight = findh0(stdPlatformParams);
 
 %% test case
 % [Trange, Phirange] = findROM_disturbance(platformParams, true, linspace(-40,40,6500));
-% [Trange, Phirange] = findROM_disturbance(platformParams, true);
+platformParams = stdPlatformParams;
+[Trange, Phirange] = findROM_disturbance(platformParams, true);
+figure
+jointAngles = StewartPlatformEqs_JointAngles([0;0;0],[0;0;0],platformParams,true);
+jointAngles
 
 %% vary platform to base ratio
 clear platformParams;
-close all;
+% close all;
 
 % define testing range
 n = 20;
@@ -93,9 +99,19 @@ for i = 1:6
 end
 sgtitle("Range of motion for varying arm/leg ratios")
 
+figure
+for i = 1:6
+    subplot(3,2,i)
+    plot(LinkageLength,RangesPlatformBaseRatio(i,:))
+    title(labels(i))
+    xlabel("arm length (in)")
+    ylabel(units(i))
+end
+sgtitle("Range of motion for varying arm/leg ratios")
+
 %% vary platform radius
 clear platformParams;
-close all;
+% close all;
 
 % define testing range
 n = 20;
@@ -125,15 +141,15 @@ for i = 1:6
     xlabel("base radius")
     ylabel(units(i))
 end
-sgtitle("Range of motion for varying base radius ratios")
+sgtitle("Range of motion for varying base radius")
 
 
 %% vary servo offset
 clear platformParams;
-close all;
+% close all;
 
 % define testing range
-n = 20;
+n = 50;
 minratio = 80;
 maxratio = 130;
 ratioRange = linspace(minratio, maxratio, n);
@@ -164,14 +180,13 @@ sgtitle("Range of motion for varying servo offset angles")
 
 %% vary angle between servos
 clear platformParams;
-close all;
+% close all;
 
 % define testing range
 n = 20;
 minratio = 10;
 maxratio = 60;
 ratioRange = linspace(minratio, maxratio, n);
-
 
 % create array of platformparam structs
 platformParamsArray = cell(1,n);
@@ -195,6 +210,76 @@ for i = 1:6
     ylabel(units(i))
 end
 sgtitle("Range of motion for varying angles between leg pairs")
+
+%% %% vary resting leg length
+clear platformParams;
+% close all;
+
+% define testing range
+n = 20;
+minratio = 20;
+maxratio = 6;
+ratioRange = linspace(minratio, maxratio, n);
+
+% create array of platformparam structs
+platformParamsArray = cell(1,n);
+for i = 1:n 
+    platformParams = stdPlatformParams;
+    platformParams.restingleglength = ratioRange(i); %% change the struct element here
+    platformParams.defaultHeight = findh0(platformParams);
+    platformParamsArray{1,i} = platformParams;
+end
+
+RangesPlatformBaseRatio = findRanges(platformParamsArray,n);
+
+labels = ["x", "roll", "y", "pitch", "z", "yaw"];
+units = ["in", "deg", "in", "deg","in", "deg",];
+figure
+for i = 1:6
+    subplot(3,2,i)
+    plot(ratioRange,RangesPlatformBaseRatio(i,:))
+    title(labels(i))
+    xlabel("angle between leg pairs")
+    ylabel(units(i))
+end
+sgtitle("Range of motion for varying default leg length")
+
+%% vary leg length
+clear platformParams;
+% close all;
+
+% define testing range
+n = 20;
+
+a = 2;
+srange = linspace(5,20,n);
+armLegRatioRange = a./srange;
+restingLegLengthRange = sqrt(s.^2*(1+stdArmLegRatio));
+
+% create array of platformparam structs
+platformParamsArray = cell(1,n);
+for i = 1:n 
+    platformParams = stdPlatformParams;
+    platformParams = armLegRatioRange(i);
+    platformParams.restingleglength = restingLegLengthRange(i); %% change the struct element here
+    platformParams.defaultHeight = findh0(platformParams);
+    platformParamsArray{1,i} = platformParams;
+end
+
+RangesPlatformBaseRatio = findRanges(platformParamsArray,n);
+
+labels = ["x", "roll", "y", "pitch", "z", "yaw"];
+units = ["in", "deg", "in", "deg","in", "deg",];
+figure
+for i = 1:6
+    subplot(3,2,i)
+    plot(srange,RangesPlatformBaseRatio(i,:))
+    title(labels(i))
+    xlabel("angle between leg pairs")
+    ylabel(units(i))
+end
+sgtitle("Range of motion for varying leg length")
+
 
 %%
 

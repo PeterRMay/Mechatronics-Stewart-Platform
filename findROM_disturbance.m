@@ -116,21 +116,29 @@ end
 if plotBool == true
     TRange
     PhiRange
-    subplot(2,2,1)
+    subplot(3,2,1)
     StewartPlatformEqs(TDisturbanceT(3,2,:), PhiDisturbanceT(3,2,:), platformParams, true, true);
     title('Max height disturbance')
     grid on
-    subplot(2,2,2)
+    subplot(3,2,2)
     StewartPlatformEqs(TDisturbanceT(3,1,:), PhiDisturbanceT(3,1,:), platformParams, true, true);
     title('Min height disturbance')
     grid on
-    subplot(2,2,3)
+    subplot(3,2,3)
     StewartPlatformEqs(TDisturbancePhi(1,2,:), PhiDisturbancePhi(1,2,:), platformParams, true, true);
     title('Max pitch disturbance')
     grid on
-    subplot(2,2,4)
+    subplot(3,2,4)
     StewartPlatformEqs(TDisturbancePhi(1,1,:), PhiDisturbancePhi(1,1,:), platformParams, true, true);
     title('Min pitch disturbance')
+    grid on
+    subplot(3,2,5)
+    StewartPlatformEqs(TDisturbancePhi(3,1,:), PhiDisturbancePhi(3,1,:), platformParams, true, true);
+    title('Max yaw disturbance')
+    grid on
+    subplot(3,2,6)
+    StewartPlatformEqs(TDisturbancePhi(3,2,:), PhiDisturbancePhi(3,2,:), platformParams, true, true);
+    title('Min yaw disturbance')
     grid on
     sgtitle('Stewart Platform Range Limits')
 end

@@ -212,7 +212,7 @@ function jointAngles = StewartPlatformEqs_JointAngles(T,Phi, platformParams, plo
     end
     for i = 1:6
         jointAngles(i) = 90 - angleBetweenVectors(-x_servo(:,i), legLengths(:,i));
-        if jointAngles(i) > ballJointRange
+        if abs(jointAngles(i)) > ballJointRange
             errorFlag = true;
         end
     end
