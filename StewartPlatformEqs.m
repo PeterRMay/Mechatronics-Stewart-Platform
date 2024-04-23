@@ -1,4 +1,4 @@
-function errorFlag = StewartPlatformEqs_JointAngles(T,Phi, platformParams, plotBool, displayWarnings)
+function errorFlag = StewartPlatformEqs(T,Phi, platformParams, plotBool, displayWarnings)
     arguments
         T
         Phi

@@ -4,7 +4,7 @@ clear all; close all; clc;
 stdPlatformBaseRatio = 1;
 stdArmLegRatio = 0.15;
 stdRestingLegLength = 11;
-stdRadius = 7;
+stdRadius = 10;
 stdServoRange = 180;
 stdServoOffset = 100;
 stdBallJointRange = 25/2;
@@ -254,13 +254,13 @@ n = 20;
 a = 2;
 srange = linspace(5,20,n);
 armLegRatioRange = a./srange;
-restingLegLengthRange = sqrt(s.^2*(1+stdArmLegRatio));
+restingLegLengthRange = sqrt((srange.^2).*(1+armLegRatioRange));
 
 % create array of platformparam structs
 platformParamsArray = cell(1,n);
 for i = 1:n 
     platformParams = stdPlatformParams;
-    platformParams = armLegRatioRange(i);
+    platformParams.armlegratio = armLegRatioRange(i);
     platformParams.restingleglength = restingLegLengthRange(i); %% change the struct element here
     platformParams.defaultHeight = findh0(platformParams);
     platformParamsArray{1,i} = platformParams;
@@ -275,7 +275,7 @@ for i = 1:6
     subplot(3,2,i)
     plot(srange,RangesPlatformBaseRatio(i,:))
     title(labels(i))
-    xlabel("angle between leg pairs")
+    xlabel("leg length (in)")
     ylabel(units(i))
 end
 sgtitle("Range of motion for varying leg length")
