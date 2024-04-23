@@ -26,13 +26,10 @@ typedef struct {
 	NiFpga_Bool irqThreadRdy; 			// ready flag
 } ThreadResource;
 
-int first = 1;
-
-const int m,n = 3;
+#define EncoderCountRev 14400 // counts per revolution
+#define DegPerRev 360 // degrees per revolution
 
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
-
-double EncoderPos[2];	//Make sure to specify which position is X and Y axis
 
 static double ZeroPosition = 200;
 static double MaxAngle = 200;
@@ -46,11 +43,6 @@ static MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM
 
 //static MyRio_Aio AIC0,AIC1,AIC2,BIC0,BIC1,BIC2;	//Connector C analog input 0
 //static MyRio_Aio AOC0;	//Connector C analog output 0
-
-
-
-
-
 
 /* prototypes */
 double GetPulse(double DesiredAngle);
@@ -131,7 +123,7 @@ int main(int argc, char **argv) {
 
 	//Other Main Tasks below----------------------------------------------------------------------------------------------------------------------------------
 
-	while (curr_state != Exit) {
+	while (irqThread0.irqThreadRdy != NiFpga_False) {
 
 	}
 
@@ -364,10 +356,11 @@ void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 
 }
 
-void pos(void) {
-
-	int Cn1,Cn2;		//variable to hold the current encoder count
-	static int Cn11,Cn12;		//variable to hold the previous encoder count
+void pos(double* EncoderPosDeg) {
+	static int first = 1; 	//first time calling function
+	int Cn1,Cn2;			//variable to hold the current encoder count
+	static int Cn11,Cn12;	//variable to hold the previous encoder count
+	double EncoderPosBDI[2];
 
 	if (first ==1) {
 		Cn11 = Encoder_Counter(&encC0);		//set the previous encoder count for the first time though
@@ -378,9 +371,10 @@ void pos(void) {
 	Cn1 = Encoder_Counter(&encC0);			//set the current encoder count
 	Cn2 = Encoder_Counter(&encC1);
 
-	EncoderPos[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
-	EncoderPos[1] = Cn2 - Cn12;
-
+	EncoderPosBDI[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
+	EncoderPosBDI[1] = Cn2 - Cn12;
+	*EncoderPosDeg = (*EncoderPosBDI / EncoderCountRev) * DegPerRev;
+	*(EncoderPosDeg+1) = (*(EncoderPosBDI+1) / EncoderCountRev) * DegPerRev;
 }
 
 void *Timer_Irq_Thread(void* resource) {
@@ -389,15 +383,9 @@ void *Timer_Irq_Thread(void* resource) {
 	ThreadResource* threadResource = (ThreadResource*) resource;
 
 	//Initialize all Encoders, Servos, State Machines and parameters needed--------------------------------------------------------------------------------
-
 	InitializePWM();
-
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
-
-	static double EncoderCountRev = 14400;
-
-	double PosDeg[2];
-
+	double PosDeg[2]; // pitch and roll of platform
 	double DesiredAngle[] = {0, 0};
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
