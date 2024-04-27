@@ -3,6 +3,7 @@
 #include <StewartPlatformConstants.h>
 #include <MyRio.h>
 
+
 /*
  * Converting the input angle to output angle.
  * The servo operates from 0 to 200 degrees but we want only 0 to 180.

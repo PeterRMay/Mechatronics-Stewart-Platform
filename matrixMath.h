@@ -63,15 +63,18 @@ void rotZYX(double angles[3], double R[3][3]) {
     R[2][2] = cos(theta)*cos(phi);
 }
 
+
 double vectorNorm(double v[3]) {
     return sqrt(v[1]*v[1] + v[2]*v[2] + v[3]*v[3]);
 }
+
 
 void vectorAdd(double A[3], double B[3], double result[3]) {
     result[0] = A[0] + B[0];
     result[1] = A[1] + B[1];
     result[2] = A[2] + B[2];
 }
+
 
 void matrixAdd33x33(double A[3][3], double B[3][3], double result[3][3]) {
     int i,j;
@@ -83,11 +86,13 @@ void matrixAdd33x33(double A[3][3], double B[3][3], double result[3][3]) {
     }
 }
 
+
 void vectorSubtract(double A[3], double B[3], double result[3]) {
     result[0] = A[0] - B[0];
     result[1] = A[1] - B[1];
     result[2] = A[2] - B[2];
 }
+
 
 void matrixSubtract33x33(double A[3][3], double B[3][3], double result[3][3]) {
     int i,j;
@@ -99,6 +104,14 @@ void matrixSubtract33x33(double A[3][3], double B[3][3], double result[3][3]) {
     }
 }
 
+void matrixMultiply31x31(double v1[3], double v2[3], double result[3]) {
+    result[0] = v1[0] * v2[0];
+    result[1] = v1[1] * v2[1];
+    result[2] = v1[2] * v2[2];
+}
+
+
+
 void matrixMultiply33x31(double R[3][3], double v[3], double result[3]) {
     result[0] = R[0][0] * v[0] + R[0][1] * v[1] + R[0][2] * v[2];
     result[1] = R[1][0] * v[0] + R[1][1] * v[1] + R[1][2] * v[2];
@@ -107,6 +120,7 @@ void matrixMultiply33x31(double R[3][3], double v[3], double result[3]) {
 
 void matrixMultiply33x33(double A[3][3], double B[3][3], double result[3][3]) {
     int i,j,k;
+
 
     for (i = 0; i < 3; i++) {        // loop over rows of A
         for (j = 0; j < 3; j++) {    // loop over columns of B
@@ -123,5 +137,13 @@ void vectorScalarMultiply(double v[3], double scalar, double result[3]) {
     result[1] = v[1] * scalar;
     result[2] = v[2] * scalar;
 }
+
+
+void transpose3x1(double matrix[3][1], double transposed[1][3]) {
+    for (int i = 0; i < 3; i++) {
+        transposed[0][i] = matrix[i][0];
+    }
+}
+
 
 #endif
