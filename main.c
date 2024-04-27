@@ -20,7 +20,7 @@
 #include "StewartPlatform.c"
 #include "conC_Encoder_initialize.h"
 #include "conC_Encoder_initialize.c"
-
+#include "matrixMath.h"
 
 extern NiFpga_Session myrio_session;
 
@@ -33,13 +33,16 @@ typedef struct {
 	NiFpga_Bool servoMode;				//Servo movement Mode
 } ThreadResource;
 
-int first = 1;
-
-const int m,n = 3;
+#define EncoderCountRev 14400 // counts per revolution
+#define DegPerRev 360 // degrees per revolution
 
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
 
 double EncoderPos[2];	//Make sure to specify which position is X and Y axis
+static double ZeroPosition = 200;
+static double MaxAngle = 200;
+static double MaxCount = 3125;
+static double MinCount = 625;
 
 double ZeroAngles[] = { 0, 0, 0, 0, 0, 0 };
 double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
@@ -48,11 +51,6 @@ MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM channe
 
 static MyRio_Dio Ch0;	//Declare the digital input channels
 static MyRio_Dio Ch1;
-
-
-
-
-
 
 /* prototypes */
 double GetPulse(double DesiredAngle);
@@ -137,7 +135,7 @@ int main(int argc, char **argv) {
 
 	//Other Main Tasks below----------------------------------------------------------------------------------------------------------------------------------
 
-	while (curr_state != Exit) {
+	while (irqThread0.irqThreadRdy != NiFpga_False) {
 
 	}
 
@@ -288,10 +286,12 @@ void InitializePWM(void) {
 
 }
 
-void pos(void) {
 
+void pos(void) {
+  static int first = 1; 	//first time calling function
 	int Cn1,Cn2;		//variable to hold the current encoder count
 	static int Cn11,Cn12;		//variable to hold the previous encoder count
+
 
 	if (first ==1) {
 		Cn11 = Encoder_Counter(&encC0);		//set the previous encoder count for the first time though
@@ -302,9 +302,10 @@ void pos(void) {
 	Cn1 = Encoder_Counter(&encC0);			//set the current encoder count
 	Cn2 = Encoder_Counter(&encC1);
 
-	EncoderPos[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
-	EncoderPos[1] = Cn2 - Cn12;
-
+	EncoderPosBDI[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
+	EncoderPosBDI[1] = Cn2 - Cn12;
+	*EncoderPosDeg = (*EncoderPosBDI / EncoderCountRev) * DegPerRev;
+	*(EncoderPosDeg+1) = (*(EncoderPosBDI+1) / EncoderCountRev) * DegPerRev;
 }
 
 void *Timer_Irq_Thread(void* resource) {
@@ -315,6 +316,7 @@ void *Timer_Irq_Thread(void* resource) {
 	NiFpga_Bool Status;
 
 	//Initialize all Encoders, Servos, State Machines and parameters needed--------------------------------------------------------------------------------
+
 
 	//Initialize PWM channels and there parameters
 	InitializePWM();
@@ -336,10 +338,27 @@ void *Timer_Irq_Thread(void* resource) {
 
 	//Declare all variables and constants for the interrupt
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	double PosDeg[2]; // pitch and roll of platform
 
-	double PosDeg[2];
+	// Platform dimensions
+	const double radius = 5.0; // inches
+	const double angleBetweenServos = 60; // degrees
+	const double servoRotationOffset = 120; // degrees
+	const double s = 10.0;
+	const double a = 2.0;
+	const double l_max = s+a; // maximum extension of leg
+	const double l_min = s-a; // minimum extension of leg
+	const double h0 = 10.198039; // home height
+	const double beta[6] = {510.0, -30.0, 270.0, 90.0, 390.0, 210.0};
+	const double B[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
+							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
+							{0, 0, 0, 0, 0, 0}}; // base dimensions in base reference frame
+	const double P[3][6] = B; // platform dimensions in platform reference frame
+	const double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
+	const double servoRotationRange = 180; // degrees
+	const double alphaMax = *alpha0 + 0.5*servoRotationRange;
+	const double alphaMin = *alpha0 - 0.5*servoRotationRange;
 
-	double DesiredAngle[] = {0, 0};
 
 	NiFpga_Bool ErrorFlag;
 
@@ -360,25 +379,23 @@ void *Timer_Irq_Thread(void* resource) {
 		OnButton = NiFpga_False;
 		OffButton = NiFpga_False;
 
-		uint32_t timeoutValue =20000;
+		uint32_t timeoutValue = 20000;
 
 		uint32_t irqAssert = 0;
 
 		Irq_Wait(threadResource->irqContext,
 		TIMERIRQNO, &irqAssert, (NiFpga_Bool*) &(threadResource->irqThreadRdy));
 
-		NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
-
-		NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
-
+		
 		extern NiFpga_Session myrio_session;
 
 		if (irqAssert) {
 			//Your Interrupt Service Code here-------------------------------------------------------------------------------------------------------------------
+			NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
+      NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
-			//Read the encoder values
-
-			//Convert the encoder values from BDI to Base angle
+			//Use pos() to get the position of each encoder relative to the starting position
+			pos(PosDeg);
 
 			//Check to see if the platform is out of range or the platforms min/max settings
 				//If so, set the error flag to 1 and servo flag to 0
@@ -443,6 +460,28 @@ void *Timer_Irq_Thread(void* resource) {
 	return NULL;
 }
 
+int GetLegLengths(double l[3][6], double legLengths[6], double* T, double* Phi, double* P, double* B, double l_max, double l_min) {
+	double R[3][3];
+	int i;
+	int errorFlag = 0;
+	
+	// calculate rotation matrix
+	rotZYX(Phi, R);
+
+	// find vector of each leg, l = (T + R*P) - B
+	l = matrixSubtract33x33(matrixAdd33x33(T,matrixMultiply33x31(R,P)), B);
+
+	// find length of each leg vector
+	for (i = 0; i < 6; i++) {
+		legLengths[i] = sqrt(l[1][i]*l[1][i] + l[2][i]*l[2][i] + l[3][i]*l[3][i]);
+		// check if leg lengths are too long or short
+		if (legLengths[i] < l_min || legLengths[i] > l_max) {
+			errorFlag = 1;
+		}
+	}
+
+	return errorFlag;
+}
 
 void home(void) {
 	//Setup PWM channels array
