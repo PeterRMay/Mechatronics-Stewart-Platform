@@ -1,7 +1,8 @@
 
 #include <PWM.h>
 #include <StewartPlatformConstants.h>
-//#include <MyRio.h>
+#include <MyRio.h>
+
 
 /*
  * Converting the input angle to output angle.
