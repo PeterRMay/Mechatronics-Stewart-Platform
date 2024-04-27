@@ -33,8 +33,8 @@ Phi_inertial_signal = nullSignal;
 Phi_inertial = timeseries(Phi_inertial_signal,t);
 
 %% ------------------SYSTEM CONSTANTS----------------------
-armLegRatio = 3/10;
-platformBaseRatio = 0.6;
+armLegRatio = 1/5;
+platformBaseRatio = 1;
 restingLegLength = 2;
 platformRadius = 1;
 servoMotorRange = 180;
