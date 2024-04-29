@@ -1,4 +1,4 @@
-/* Lab <PWM Testing>
+/* Lab <Lab8 Testing>
  * Author: <Julius Wichert>
  * Date: <3/3/24>
  * Description: <lab exercise description>
@@ -16,10 +16,9 @@
 #include <unistd.h>
 #include <MyRio1900.h>
 #include "DIO.h"
-#include "StewartPlatformConstants.h"
-#include "StewartPlatform.c"
+//#include "StewartPlatformConstants.h"
+//#include "StewartPlatform.c"
 #include "conC_Encoder_initialize.h"
-#include "conC_Encoder_initialize.c"
 
 
 extern NiFpga_Session myrio_session;
@@ -49,14 +48,23 @@ MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM channe
 static MyRio_Dio Ch0;	//Declare the digital input channels
 static MyRio_Dio Ch1;
 
+double AngleRange = 200;
+double MaxCount = 3125;
+double MinCount = 625;
+double ZeroPosition = 200;
+
+
 
 
 
 
 
 /* prototypes */
+NiFpga_Status    conC_Encoder_initialize(NiFpga_Session myrio_session, MyRio_Encoder *encCp, int iE);
+
 double GetPulse(double DesiredAngle);
-void MoveServos(double *Angles, MyRio_Pwm *PWM_Channels);
+
+void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels);
 
 void *Timer_Irq_Thread(void* resource);
 
@@ -307,6 +315,72 @@ void pos(void) {
 
 }
 
+/* Converting the input angle to output angle.
+ * The servo operates from 0 to 200 degrees but we want only 0 to 180.
+ * max pulse width = 2500 micro seconds
+ * min pulse width = 500 micro seconds
+ * total pulse = 2o milliseconds
+ * max counter = 3125 of 25000
+ * min counter = 625 of 25000
+ *
+ * Steps:
+ * 1) Intakes desired angle
+ * 2) Compensate for zero position
+ * 3) Find Percent of angle movement
+ * 4) Convert to percent of pulse width
+ * 5) Send pulse width to signal generation
+ * 6) Repeat until told to stop
+ *
+ *
+ * ZeroPosition = 90 degrees
+ * MaxAngle = 200
+ * MaxCount = 3125
+ * MinCount = 625
+ *
+ * Compensate by wanted wanted from zero if we consider 90 to be zero.
+ *
+ * GoAngle = DesiredAngle + ZeroPosition
+ *
+ * AnglePercent = GoAngle/MaxAngle
+ *
+ * PulseCount = ((MaxCount - MinCount) * AnglePercent) + MinCount
+ */
+
+double GetPulse(double DesiredAngle) {
+	double PulseCount;
+	double GoAngle;
+	double AnglePercent;
+
+
+	GoAngle = DesiredAngle + ZeroPosition;
+
+	AnglePercent = GoAngle / AngleRange;
+
+	PulseCount = ((MaxCount - MinCount) * AnglePercent) + MinCount;
+
+	return PulseCount;
+}
+
+void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
+
+	//Create Pointers to the Individual PWM Structures that we fed in
+	MyRio_Pwm *PWM1 = PWM_Channels;
+	MyRio_Pwm *PWM2 = PWM_Channels + 1;
+	MyRio_Pwm *PWM3 = PWM_Channels + 2;
+	MyRio_Pwm *PWM4 = PWM_Channels + 3;
+	MyRio_Pwm *PWM5 = PWM_Channels + 4;
+	MyRio_Pwm *PWM6 = PWM_Channels + 5;
+
+	//Change the PWM Counter compare value to the needed one for the given desired angle for that specific signal
+	Pwm_CounterCompare(PWM1, GetPulse(Angles[0]));
+	Pwm_CounterCompare(PWM2, GetPulse(Angles[1]));
+	Pwm_CounterCompare(PWM3, GetPulse(Angles[2]));
+	Pwm_CounterCompare(PWM4, GetPulse(Angles[3]));
+	Pwm_CounterCompare(PWM5, GetPulse(Angles[4]));
+	Pwm_CounterCompare(PWM6, GetPulse(Angles[5]));
+
+}
+
 void *Timer_Irq_Thread(void* resource) {
 
 	// Cast the Input argument back to its intended form---------------------------------------------------------------------------------------------------------
@@ -320,8 +394,8 @@ void *Timer_Irq_Thread(void* resource) {
 	InitializePWM();
 
 	//Initialize Encoders
-	Status = conC_Encoder_Initialize(myrio_session, encC0, 0);
-	Status = conC_Encoder_Initialize(myrio_session, encC1, 1);
+	Status = conC_Encoder_initialize(myrio_session, &encC0, 0);
+	Status = conC_Encoder_initialize(myrio_session, &encC1, 1);
 
 	//Initialize the digital input/output channels
 	Ch0.dir = DIOA_70DIR;
@@ -341,11 +415,13 @@ void *Timer_Irq_Thread(void* resource) {
 
 	double DesiredAngle[] = {0, 0};
 
-	NiFpga_Bool ErrorFlag;
+	NiFpga_Bool ErrorFlag = NiFpga_False;
 
 	NiFpga_Bool OnButton = NiFpga_False;
 
 	NiFpga_Bool OffButton = NiFpga_False;
+
+	curr_state = Home;
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
 	 *  - It will wait for the occurrence( or timeout) of the IRQ
@@ -389,8 +465,8 @@ void *Timer_Irq_Thread(void* resource) {
 				//If not continue
 
 			//Set the appropriate state
-			OnButton = Dio_ReadBit(Ch0);		//Check On Button
-			OffButton = Dio_ReadBit(Ch1);		//Check Off Button
+//			OnButton = Dio_ReadBit(&Ch0);		//Check On Button
+//			OffButton = Dio_ReadBit(&Ch1);		//Check Off Button
 
 				//Check for Home State
 				if(curr_state == Home) {
