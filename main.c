@@ -19,6 +19,9 @@
 //#include "StewartPlatformConstants.h"
 //#include "StewartPlatform.c"
 #include "conC_Encoder_initialize.h"
+#include "conC_Encoder_initialize.c"
+#include "matrixMath.h"
+#include "baseToStaticPlatformPosition.h"
 
 
 extern NiFpga_Session myrio_session;
@@ -296,10 +299,13 @@ void InitializePWM(void) {
 
 }
 
-void pos(void) {
 
+void pos(double PosDeg[3]) {
+ 	static int first = 1; 	//first time calling function
 	int Cn1,Cn2;		//variable to hold the current encoder count
 	static int Cn11,Cn12;		//variable to hold the previous encoder count
+	double EncoderPosBDI[2];
+
 
 	if (first ==1) {
 		Cn11 = Encoder_Counter(&encC0);		//set the previous encoder count for the first time though
@@ -310,8 +316,10 @@ void pos(void) {
 	Cn1 = Encoder_Counter(&encC0);			//set the current encoder count
 	Cn2 = Encoder_Counter(&encC1);
 
-	EncoderPos[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
-	EncoderPos[1] = Cn2 - Cn12;
+	EncoderPosBDI[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
+	EncoderPosBDI[1] = Cn2 - Cn12;
+	PosDeg[0] = (EncoderPosBDI[0] / EncoderCountRev) * DegPerRev;
+	PosDeg[1] = (EncoderPosBDI[1] / EncoderCountRev) * DegPerRev;
 
 }
 
@@ -411,17 +419,44 @@ void *Timer_Irq_Thread(void* resource) {
 	//Declare all variables and constants for the interrupt
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
-	double PosDeg[2];
 
+	// Platform dimensions
+	const double radius = 5.0; // inches
+	const double angleBetweenServos = 60; // degrees
+	const double servoRotationOffset = 120; // degrees
+	const double s = 10.0;
+	const double a = 2.0;
+	const double l_max = s+a; // maximum extension of leg
+	const double l_min = s-a; // minimum extension of leg
+	const double h0 = 10.198039; // home height
+	const double beta[6] = {510.0, -30.0, 270.0, 90.0, 390.0, 210.0};
+	const double B[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
+							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
+							{0, 0, 0, 0, 0, 0}}; // base dimensions in base reference frame
+	const double P[3][6] = B; // platform dimensions in platform reference frame
+	const double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
+	const double servoRotationRange = 180; // degrees
+	const double alphaMax = *alpha0 + 0.5*servoRotationRange;
+	const double alphaMin = *alpha0 - 0.5*servoRotationRange;
+
+	// Platform position
+	double T[3];
+	double Phi[3];
+	double P_base[3][6];
+	double legLengths[6];
+	double T_desired[3] = {0, 0, 0};
+	double Phi_desired[3] = {0, 0, 0};
+	double D[3] = {0, 0, 0};
+	double Gamma[3]; // pitch and roll of platform
+	
+	int ErrorFlag = 0;
 	double DesiredAngle[] = {0, 0};
-
-	NiFpga_Bool ErrorFlag = NiFpga_False;
 
 	NiFpga_Bool OnButton = NiFpga_False;
 
 	NiFpga_Bool OffButton = NiFpga_False;
 
-	curr_state = Home;
+	curr_state = Home; // note to change this for future testing
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
 	 *  - It will wait for the occurrence( or timeout) of the IRQ
@@ -452,17 +487,25 @@ void *Timer_Irq_Thread(void* resource) {
 		if (irqAssert) {
 			//Your Interrupt Service Code here-------------------------------------------------------------------------------------------------------------------
 
-			//Read the encoder values
+			NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
+      		NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
-			//Convert the encoder values from BDI to Base angle
+			//Use pos() to get the position of each encoder relative to the starting position
+			pos(Gamma);
+
 
 			//Check to see if the platform is out of range or the platforms min/max settings
 				//If so, set the error flag to 1 and servo flag to 0
 				//If not continue
+			baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
+
+			// Calculate required leg lengths
+			ErrorFlag = GetLegLengths(P_base, legLengths, T, Phi, B, l_max, l_min);
 
 			//Take the Base position and calculate the required servo correction
 				//If the correction is outside the servos range, set the error flag to 1 and servo flag to 0
 				//If not continue
+			// servoCalc(P_base, )
 
 			//Set the appropriate state
 //			OnButton = Dio_ReadBit(&Ch0);		//Check On Button
@@ -519,10 +562,35 @@ void *Timer_Irq_Thread(void* resource) {
 	return NULL;
 }
 
+int GetLegLengths(double P_base[3][6], double legLengths[6], double T[3], double Phi[3], double P[3][6], double B[3][6], double l_max, double l_min) {
+	double R[3][3];
+	double l[3][6];
+	int i;
+	int errorFlag = 0;
+	
+	// calculate rotation matrix
+	rotZYX(Phi, R);
+
+	// find vector of each leg, l = (T + R*P) - B
+	l = matrixSubtract33x33(matrixAdd33x33(T,matrixMultiply33x31(R,P)), B);
+
+	// find length of each leg vector
+	for (i = 0; i < 6; i++) {
+		legLengths[i] = sqrt(l[1][i]*l[1][i] + l[2][i]*l[2][i] + l[3][i]*l[3][i]);
+		// check if leg lengths are too long or short
+		if (legLengths[i] < l_min || legLengths[i] > l_max) {
+			errorFlag = 1;
+		}
+		vectorAdd(l[3][i], P[3][i], P_base[3][i]); // find platform positions 
+	}
+
+	return errorFlag;
+}
+
 
 void home(void) {
 	//Setup PWM channels array
-	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	static MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
 	MoveServos(ZeroAngles, PWM_Channels);
@@ -531,7 +599,7 @@ void home(void) {
 
 void responding(void) {
 	//Setup PWM channels array
-	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	static MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
 	MoveServos(DesiredAngles, PWM_Channels);
