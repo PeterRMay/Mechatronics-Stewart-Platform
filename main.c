@@ -1,7 +1,7 @@
-/* Lab <Lab8 Testing>
- * Author: <Julius Wichert>
- * Date: <3/3/24>
- * Description: <lab exercise description>
+/* Stewart Platform Controls
+ * Author: Team ?
+ * Date: 4/30/24
+ * Description: 
  */
 
 /* includes */
@@ -22,44 +22,35 @@
 #include "conC_Encoder_initialize.c"
 #include "matrixMath.h"
 #include "baseToStaticPlatformPosition.h"
+#include "servoCalc.h"
 
 
 extern NiFpga_Session myrio_session;
 
 /* definitions */
 
-typedef struct {
+typedef struct { // define thread resource structure
 	NiFpga_IrqContext irqContext; 			// context
 	NiFpga_Bool irqThreadRdy; 			// ready flag
 	NiFpga_Bool errorFlag;					//ErrorFlag for calculations
 	NiFpga_Bool servoMode;				//Servo movement Mode
 } ThreadResource;
 
-int first = 1;
-
-const int m,n = 3;
-
+/* global variables */
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
-
-double EncoderPos[2];	//Make sure to specify which position is X and Y axis
-
-double ZeroAngles[] = { 0, 0, 0, 0, 0, 0 };
-double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
-
+static double ZeroAngles[] = { 0, 0, 0, 0, 0, 0 };
+static double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
 MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM channels
 
-static MyRio_Dio Ch0;	//Declare the digital input channels
+//Declare the digital input channels
+static MyRio_Dio Ch0;	
 static MyRio_Dio Ch1;
 
+// servo data
 double AngleRange = 200;
 double MaxCount = 3125;
 double MinCount = 625;
 double ZeroPosition = 200;
-
-
-
-
-
 
 
 /* prototypes */
@@ -88,22 +79,7 @@ static void (*state_table[])(void)={home, responding, error};
 //Has to go after the enum type declaration to declare current state holder variable
 static State_Type curr_state;
 
-/**
- * Overview:
- * Demonstrates using the PWM. Generates a PWM signal from PWM 0 on
- * connector A.
- *
- * Instructions:
- * 1. Connect an oscilloscope to the PWM 0 pin on connector A.
- * 2. Run this program.
- *
- * Output:
- * The program generates a signal at 50 Hz
- *
- * Note:
- * The Eclipse project defines the preprocessor symbol for the myRIO-1900.
- * Change the preprocessor symbol to use this example with the myRIO-1950.
- */
+
 int main(int argc, char **argv) {
 	NiFpga_Status status;
 
@@ -173,7 +149,7 @@ void InitializePWM(void) {
 
 	//Create the PWM channel structures
 
-	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	static MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	/*
 	 * Initialize the PWM struct with registers from the FPGA personality.
@@ -416,9 +392,8 @@ void *Timer_Irq_Thread(void* resource) {
 	Ch1.in = DIOA_70IN;
 	Ch1.bit = 1;
 
-	//Declare all variables and constants for the interrupt
+	//Declare all variables and constants for the interrupt-----------------------
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
-
 
 	// Platform dimensions
 	const double radius = 5.0; // inches
@@ -448,6 +423,8 @@ void *Timer_Irq_Thread(void* resource) {
 	double Phi_desired[3] = {0, 0, 0};
 	double D[3] = {0, 0, 0};
 	double Gamma[3]; // pitch and roll of platform
+	double alpha[6];
+	double l[3][6];
 	
 	int ErrorFlag = 0;
 	double DesiredAngle[] = {0, 0};
@@ -471,16 +448,12 @@ void *Timer_Irq_Thread(void* resource) {
 		OnButton = NiFpga_False;
 		OffButton = NiFpga_False;
 
-		uint32_t timeoutValue =20000;
+		uint32_t timeoutValue = 20000;
 
 		uint32_t irqAssert = 0;
 
 		Irq_Wait(threadResource->irqContext,
 		TIMERIRQNO, &irqAssert, (NiFpga_Bool*) &(threadResource->irqThreadRdy));
-
-		NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
-
-		NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
 		extern NiFpga_Session myrio_session;
 
@@ -493,19 +466,19 @@ void *Timer_Irq_Thread(void* resource) {
 			//Use pos() to get the position of each encoder relative to the starting position
 			pos(Gamma);
 
-
-			//Check to see if the platform is out of range or the platforms min/max settings
-				//If so, set the error flag to 1 and servo flag to 0
-				//If not continue
+			//Convert disturbance to correction translation and angles
 			baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
 
+			// add here a section that checks if it is out of platform range for sure
+			// put in values from matlab
+
 			// Calculate required leg lengths
-			ErrorFlag = GetLegLengths(P_base, legLengths, T, Phi, B, l_max, l_min);
+			ErrorFlag = GetLegLengths(P_base, l, legLengths, T, Phi, B, l_max, l_min);
 
 			//Take the Base position and calculate the required servo correction
 				//If the correction is outside the servos range, set the error flag to 1 and servo flag to 0
 				//If not continue
-			// servoCalc(P_base, )
+			ErrorFlag = servoCalc(alpha, P_base, B, l, s, a, beta, alphaMax, alphaMin);
 
 			//Set the appropriate state
 //			OnButton = Dio_ReadBit(&Ch0);		//Check On Button
@@ -562,17 +535,24 @@ void *Timer_Irq_Thread(void* resource) {
 	return NULL;
 }
 
-int GetLegLengths(double P_base[3][6], double legLengths[6], double T[3], double Phi[3], double P[3][6], double B[3][6], double l_max, double l_min) {
+int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double P[3][6], double B[3][6], double l_max, double l_min) {
 	double R[3][3];
-	double l[3][6];
-	int i;
+	double V[3];
+	int i, j;
 	int errorFlag = 0;
 	
 	// calculate rotation matrix
 	rotZYX(Phi, R);
 
 	// find vector of each leg, l = (T + R*P) - B
-	l = matrixSubtract33x33(matrixAdd33x33(T,matrixMultiply33x31(R,P)), B);
+	for (i = 0; i<6; i++) {
+		V = matrixSubtract33x33(matrixAdd33x33(T,matrixMultiply33x31(R,P)), B);
+		for (j=0; j<3; j++) {
+			l[j][i] = V[j];
+		}
+		
+	}
+	
 
 	// find length of each leg vector
 	for (i = 0; i < 6; i++) {

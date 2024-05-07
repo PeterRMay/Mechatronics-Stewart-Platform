@@ -1,21 +1,30 @@
 #include "servoCalc.h"
 
-double servoCalc(double P_base_i[3][6], double B_i[3][6], double l[6], double s, double a, double beta, int maxAlphaRange, int minAlphaRange) {
-    double L = l * l - (s * s - a * a);
-    double M = 2 * a * (P_base_i[2] - B_i[2]);
-    double N = 2 * a * (cos(deg2rad(beta)) * (P_base_i[0] - B_i[0]) + sin(deg2rad(beta)) * (P_base_i[1] - B_i[1]));
-
-    double foo = L / sqrt(M * M + N * N);
-    foo = fmax(-1, fmin(1, foo)); // Clamping foo to be within [-1, 1]
-
-    double alpha = rad2deg(asin(foo)) - rad2deg(atan2(N, M));
-    if (isnan(alpha)) {
-        alpha = 0;
+int servoCalc(double alpha[6], double P_base[3][6], double B[3][6], double l[6], double s, double a, double beta, int maxAlphaRange, int minAlphaRange) {
+    double L, M, N, foo;
+    int errorFlag = 0;
+    for (int i = 0; i < 6; i++) {
+        L = l[i] * l[i] - (s * s - a * a);
+        M = 2 * a * (P_base[2][i] - B[2][i]);
+        N = 2 * a * (cos(deg2rad(beta)) * (P_base[0][i] - B[0][i]) + sin(deg2rad(beta)) * (P_base[1][i] - B[1][i]));
+        foo = L / sqrt(M * M + N * N);
+        if (foo < -1 || foo > 1) {
+            errorFlag = 1;
+        }
+        foo = fmax(-1, fmin(1, foo)); // Clamping foo to be within [-1, 1]
+        alpha[i] = rad2deg(asin(foo)) - rad2deg(atan2(N, M));
+        if (isnan(alpha)) {
+            alpha[i] = 0;
+            errorFlag = 1;
+        }
+        if (alpha[i] > maxAlphaRange) {
+            alpha[i] = maxAlphaRange;
+            errorFlag = 1;
+        } else if (alpha < minAlphaRange) {
+            alpha[i] = minAlphaRange;
+            errorFlag = 1;
+        }
     }
-    if (alpha > maxAlphaRange) {
-        alpha = maxAlphaRange;
-    } else if (alpha < minAlphaRange) {
-        alpha = minAlphaRange;
-    }
-    return alpha;
+    
+    return errorFlag;
 }
