@@ -16,9 +16,7 @@
 #include <unistd.h>
 #include <MyRio1900.h>
 #include "DIO.h"
-//#include "StewartPlatformConstants.h"
-//#include "StewartPlatform.c"
-#include "conC_Encoder_initialize.h"
+
 
 
 extern NiFpga_Session myrio_session;
@@ -53,6 +51,9 @@ double MaxCount = 3125;
 double MinCount = 625;
 double ZeroPosition = 200;
 
+double EncoderCountRev = 8094;
+double DegPerRev = 360;
+
 
 
 
@@ -70,13 +71,16 @@ void *Timer_Irq_Thread(void* resource);
 
 void InitializePWM();
 
+void pos(double PosDeg[3]);
+
 void home(void);
 void responding(void);
 void error(void);
+void exxit(void);
 
 /* Define an enumerated type for states */
 
-typedef enum {Home=0, Responding, Error, Exit} State_Type;
+typedef enum {Home=0, Responding, Error, Exxit} State_Type;
 
 /* Define a table of pointers to the functions for each state */
 
@@ -145,7 +149,9 @@ int main(int argc, char **argv) {
 
 	//Other Main Tasks below----------------------------------------------------------------------------------------------------------------------------------
 
-	while (curr_state != Exit) {
+	OnCounter = 0;
+
+	while (curr_state != Exxit) {
 
 	}
 
@@ -296,10 +302,12 @@ void InitializePWM(void) {
 
 }
 
-void pos(void) {
-
+void pos(double PosDeg[3]) {
+ 	static int first = 1; 	//first time calling function
 	int Cn1,Cn2;		//variable to hold the current encoder count
 	static int Cn11,Cn12;		//variable to hold the previous encoder count
+	double EncoderPosBDI[2];
+
 
 	if (first ==1) {
 		Cn11 = Encoder_Counter(&encC0);		//set the previous encoder count for the first time though
@@ -310,8 +318,10 @@ void pos(void) {
 	Cn1 = Encoder_Counter(&encC0);			//set the current encoder count
 	Cn2 = Encoder_Counter(&encC1);
 
-	EncoderPos[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
-	EncoderPos[1] = Cn2 - Cn12;
+	EncoderPosBDI[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
+	EncoderPosBDI[1] = Cn2 - Cn12;
+	PosDeg[0] = (EncoderPosBDI[0] / EncoderCountRev) * DegPerRev;
+	PosDeg[1] = (EncoderPosBDI[1] / EncoderCountRev) * DegPerRev;
 
 }
 
@@ -388,6 +398,8 @@ void *Timer_Irq_Thread(void* resource) {
 
 	NiFpga_Bool Status;
 
+	static int OnCounter = 0;
+
 	//Initialize all Encoders, Servos, State Machines and parameters needed--------------------------------------------------------------------------------
 
 	//Initialize PWM channels and there parameters
@@ -409,11 +421,6 @@ void *Timer_Irq_Thread(void* resource) {
 	Ch1.bit = 1;
 
 	//Declare all variables and constants for the interrupt
-//	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
-//
-//	double PosDeg[2];
-//
-//	double DesiredAngle[] = {0, 0};
 
 	NiFpga_Bool ErrorFlag = 0;
 
@@ -443,30 +450,45 @@ void *Timer_Irq_Thread(void* resource) {
 		Irq_Wait(threadResource->irqContext,
 		TIMERIRQNO, &irqAssert, (NiFpga_Bool*) &(threadResource->irqThreadRdy));
 
-		NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
-
-		NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
-
 		extern NiFpga_Session myrio_session;
 
 		if (irqAssert) {
 			//Your Interrupt Service Code here-------------------------------------------------------------------------------------------------------------------
 
-			//Read the encoder values
+			NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
+			NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
-			//Convert the encoder values from BDI to Base angle
+			//Use pos() to get the position of each encoder relative to the starting position
+			//pos(Gamma);
+
 
 			//Check to see if the platform is out of range or the platforms min/max settings
 				//If so, set the error flag to 1 and servo flag to 0
 				//If not continue
+			//baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
+
+			// Calculate required leg lengths
+			//ErrorFlag = GetLegLengths(P_base, legLengths, T, Phi, B, l_max, l_min);
 
 			//Take the Base position and calculate the required servo correction
 				//If the correction is outside the servos range, set the error flag to 1 and servo flag to 0
 				//If not continue
+			// servoCalc(P_base, )
 
 			//Set the appropriate state
-			OnButton = Dio_ReadBit(&Ch0);		//Check On Button
-			OffButton = Dio_ReadBit(&Ch1);		//Check Off Button
+			if(Dio_ReadBit(&Ch0) == 0) {
+				OnButton = 1;
+			} else if(Dio_ReadBit(&Ch0) == 1) {
+				OnButton = 0;
+			}
+
+			if(Dio_ReadBit(&Ch1) == 0) {
+				OffButton = 1;
+			} else if(Dio_ReadBit(&Ch1) == 1) {
+				OffButton = 0;
+			}
+//			printf("%d", Dio_ReadBit(&Ch0));
+//			printf("%d\n", Dio_ReadBit(&Ch1));
 
 				//Check for Home State
 				if(curr_state == Home) {
@@ -474,8 +496,9 @@ void *Timer_Irq_Thread(void* resource) {
 						curr_state = Responding;
 					} else if(ErrorFlag == 1 && OffButton == 0) {
 						curr_state = Error;
-					} else if(OffButton == 1) {
-						curr_state = Exit;
+					} else if(OffButton == 1 && OnCounter == 1000) {
+						//curr_state = Home;
+						curr_state = Exxit;
 					} else {
 						curr_state = Home;
 					}
@@ -487,6 +510,7 @@ void *Timer_Irq_Thread(void* resource) {
 						curr_state = Error;
 					} else if(OffButton == 1) {
 						curr_state = Home;
+						OnCounter = 0;
 					} else {
 						curr_state = Responding;
 					}
@@ -506,8 +530,16 @@ void *Timer_Irq_Thread(void* resource) {
 
 				}
 
+			//Set the buttons and errors back to normal for the next time through
+				ErrorFlag = 0;
+				OffButton = 0;
+				OnButton = 0;
 			//run the current state
-			state_table[curr_state]();
+			if(curr_state != Exxit) {
+				state_table[curr_state]();
+			}
+
+			OnCounter++;
 
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
 			Irq_Acknowledge(irqAssert);
@@ -539,6 +571,10 @@ void responding(void) {
 }
 
 void error(void) {
+
+}
+
+void exxit(void) {
 
 }
 
