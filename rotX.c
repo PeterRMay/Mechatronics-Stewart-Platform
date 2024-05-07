@@ -1,4 +1,5 @@
 #include "matrixMath.h"
+#include <math.h>
 
 void rotX(double angles[3], double R[3][3]) {
     double phi = angles[2];

@@ -1,6 +1,7 @@
 #include "servoCalc.h"
 
 void servoCalcWrapper(double P_base[3][6], double B[3][6], double l_2norm[6], double s, double a, double beta[6], double alpha_max, double alpha_min, double alpha[6], double servoArms[3][6]) {
+    /*
     bool errorFlag = false;
     double angles[3];
     double Rz[3][3], Ry[3][3], Rzyx[3][3];
@@ -34,4 +35,5 @@ void servoCalcWrapper(double P_base[3][6], double B[3][6], double l_2norm[6], do
             alpha[i] = alpha_max;
         }
     }
+    */
 }
