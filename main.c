@@ -52,6 +52,9 @@ double MaxCount = 3125;
 double MinCount = 625;
 double ZeroPosition = 200;
 
+double EncoderCountRev = 8094;
+double DegPerRev = 360;
+
 
 /* prototypes */
 NiFpga_Status    conC_Encoder_initialize(NiFpga_Session myrio_session, MyRio_Encoder *encCp, int iE);
@@ -64,13 +67,16 @@ void *Timer_Irq_Thread(void* resource);
 
 void InitializePWM();
 
+void pos(double PosDeg[3]);
+
 void home(void);
 void responding(void);
 void error(void);
+void exit(void);
 
 /* Define an enumerated type for states */
 
-typedef enum {Home=0, Responding, Error, Exit} State_Type;
+typedef enum {Home=0, Responding, Error, Exxit} State_Type;
 
 /* Define a table of pointers to the functions for each state */
 
@@ -124,7 +130,9 @@ int main(int argc, char **argv) {
 
 	//Other Main Tasks below----------------------------------------------------------------------------------------------------------------------------------
 
-	while (curr_state != Exit) {
+	OnCounter = 0;
+
+	while (curr_state != Exxit) {
 
 	}
 
@@ -275,7 +283,6 @@ void InitializePWM(void) {
 
 }
 
-
 void pos(double PosDeg[3]) {
  	static int first = 1; 	//first time calling function
 	int Cn1,Cn2;		//variable to hold the current encoder count
@@ -372,6 +379,8 @@ void *Timer_Irq_Thread(void* resource) {
 
 	NiFpga_Bool Status;
 
+	static int OnCounter = 0;
+
 	//Initialize all Encoders, Servos, State Machines and parameters needed--------------------------------------------------------------------------------
 
 	//Initialize PWM channels and there parameters
@@ -391,6 +400,7 @@ void *Timer_Irq_Thread(void* resource) {
 	Ch1.out = DIOA_70OUT;
 	Ch1.in = DIOA_70IN;
 	Ch1.bit = 1;
+
 
 	//Declare all variables and constants for the interrupt-----------------------
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
@@ -445,8 +455,8 @@ void *Timer_Irq_Thread(void* resource) {
 
 	while (threadResource->irqThreadRdy == NiFpga_True) {
 		//Reset the on and off button boolean values
-		OnButton = NiFpga_False;
-		OffButton = NiFpga_False;
+		OnButton = 0;
+		OffButton = 0;
 
 		uint32_t timeoutValue = 20000;
 
@@ -461,13 +471,19 @@ void *Timer_Irq_Thread(void* resource) {
 			//Your Interrupt Service Code here-------------------------------------------------------------------------------------------------------------------
 
 			NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
-      		NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
+			NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
 			//Use pos() to get the position of each encoder relative to the starting position
-			pos(Gamma);
+			//pos(Gamma);
 
+
+
+			//Check to see if the platform is out of range or the platforms min/max settings
+				//If so, set the error flag to 1 and servo flag to 0
+				//If not continue
 			//Convert disturbance to correction translation and angles
 			baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
+
 
 			// add here a section that checks if it is out of platform range for sure
 			// put in values from matlab
@@ -481,17 +497,29 @@ void *Timer_Irq_Thread(void* resource) {
 			ErrorFlag = servoCalc(alpha, P_base, B, l, s, a, beta, alphaMax, alphaMin);
 
 			//Set the appropriate state
-//			OnButton = Dio_ReadBit(&Ch0);		//Check On Button
-//			OffButton = Dio_ReadBit(&Ch1);		//Check Off Button
+			if(Dio_ReadBit(&Ch0) == 0) {
+				OnButton = 1;
+			} else if(Dio_ReadBit(&Ch0) == 1) {
+				OnButton = 0;
+			}
+
+			if(Dio_ReadBit(&Ch1) == 0) {
+				OffButton = 1;
+			} else if(Dio_ReadBit(&Ch1) == 1) {
+				OffButton = 0;
+			}
+//			printf("%d", Dio_ReadBit(&Ch0));
+//			printf("%d\n", Dio_ReadBit(&Ch1));
 
 				//Check for Home State
 				if(curr_state == Home) {
-					if(OnButton == NiFpga_True && ErrorFlag == NiFpga_False && OffButton == NiFpga_False) {
+					if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
 						curr_state = Responding;
-					} else if(ErrorFlag == NiFpga_True && OffButton == NiFpga_False) {
+					} else if(ErrorFlag == 1 && OffButton == 0) {
 						curr_state = Error;
-					} else if(OffButton == NiFpga_True) {
-						curr_state = Exit;
+					} else if(OffButton == 1 && OnCounter == 1000) {
+						//curr_state = Home;
+						curr_state = Exxit;
 					} else {
 						curr_state = Home;
 					}
@@ -499,10 +527,11 @@ void *Timer_Irq_Thread(void* resource) {
 
 				//Check for Responding State
 				if(curr_state == Responding) {
-					if(ErrorFlag == NiFpga_True && OffButton ==NiFpga_False) {
+					if(ErrorFlag == 1 && OffButton == 0) {
 						curr_state = Error;
-					} else if(OffButton == NiFpga_True) {
+					} else if(OffButton == 1) {
 						curr_state = Home;
+						OnCounter = 0;
 					} else {
 						curr_state = Responding;
 					}
@@ -510,11 +539,11 @@ void *Timer_Irq_Thread(void* resource) {
 
 				//Check for Error State
 				if(curr_state == Error) {
-					if(OnButton == NiFpga_True && ErrorFlag == NiFpga_False && OffButton == NiFpga_False) {
+					if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
 						curr_state = Home;
-					} else if(ErrorFlag == NiFpga_True && OffButton == NiFpga_False) {
+					} else if(ErrorFlag == 1 && OffButton == 0) {
 						curr_state = Error;
-					} else if(OffButton == NiFpga_True) {
+					} else if(OffButton == 1) {
 						curr_state = Home;
 					} else {
 						curr_state = Error;
@@ -522,8 +551,16 @@ void *Timer_Irq_Thread(void* resource) {
 
 				}
 
+			//Set the buttons and errors back to normal for the next time through
+				ErrorFlag = 0;
+				OffButton = 0;
+				OnButton = 0;
 			//run the current state
-			state_table[curr_state]();
+			if(curr_state != Exxit) {
+				state_table[curr_state]();
+			}
+
+			OnCounter++;
 
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
 			Irq_Acknowledge(irqAssert);
@@ -568,9 +605,10 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 }
 
 
+
 void home(void) {
 	//Setup PWM channels array
-	static MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
 	MoveServos(ZeroAngles, PWM_Channels);
@@ -579,7 +617,7 @@ void home(void) {
 
 void responding(void) {
 	//Setup PWM channels array
-	static MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
 	MoveServos(DesiredAngles, PWM_Channels);
@@ -587,6 +625,10 @@ void responding(void) {
 }
 
 void error(void) {
+
+}
+
+void exit(void) {
 
 }
 
