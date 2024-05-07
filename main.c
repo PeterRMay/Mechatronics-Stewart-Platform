@@ -57,33 +57,24 @@ double DegPerRev = 360;
 
 
 /* prototypes */
-NiFpga_Status    conC_Encoder_initialize(NiFpga_Session myrio_session, MyRio_Encoder *encCp, int iE);
-
+NiFpga_Status conC_Encoder_initialize(NiFpga_Session myrio_session, MyRio_Encoder *encCp, int iE);
 double GetPulse(double DesiredAngle);
-
 void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels);
-
 void *Timer_Irq_Thread(void* resource);
-
 void InitializePWM();
-
 void pos(double PosDeg[3]);
-
 void home(void);
 void responding(void);
 void error(void);
-void exit(void);
 
 /* Define an enumerated type for states */
-
-typedef enum {Home=0, Responding, Error, Exxit} State_Type;
+typedef enum {Home, Responding, Error, Exxit} State_Type;
 
 /* Define a table of pointers to the functions for each state */
-
 static void (*state_table[])(void)={home, responding, error};
 
 //Has to go after the enum type declaration to declare current state holder variable
-static State_Type curr_state;
+static State_Type curr_state = Home;
 
 
 int main(int argc, char **argv) {
@@ -129,9 +120,6 @@ int main(int argc, char **argv) {
 	NULL, Timer_Irq_Thread, &irqThread0);
 
 	//Other Main Tasks below----------------------------------------------------------------------------------------------------------------------------------
-
-	OnCounter = 0;
-
 	while (curr_state != Exxit) {
 
 	}
@@ -376,13 +364,9 @@ void *Timer_Irq_Thread(void* resource) {
 
 	// Cast the Input argument back to its intended form---------------------------------------------------------------------------------------------------------
 	ThreadResource* threadResource = (ThreadResource*) resource;
-
 	NiFpga_Bool Status;
 
-	static int OnCounter = 0;
-
 	//Initialize all Encoders, Servos, State Machines and parameters needed--------------------------------------------------------------------------------
-
 	//Initialize PWM channels and there parameters
 	InitializePWM();
 
@@ -436,14 +420,11 @@ void *Timer_Irq_Thread(void* resource) {
 	double alpha[6];
 	double l[3][6];
 	
+	int OnCounter = 0;
 	int ErrorFlag = 0;
 	double DesiredAngle[] = {0, 0};
-
 	NiFpga_Bool OnButton = NiFpga_False;
-
 	NiFpga_Bool OffButton = NiFpga_False;
-
-	curr_state = Home; // note to change this for future testing
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
 	 *  - It will wait for the occurrence( or timeout) of the IRQ
@@ -457,11 +438,9 @@ void *Timer_Irq_Thread(void* resource) {
 		//Reset the on and off button boolean values
 		OnButton = 0;
 		OffButton = 0;
-
+		ErrorFlag = 0;
 		uint32_t timeoutValue = 20000;
-
 		uint32_t irqAssert = 0;
-
 		Irq_Wait(threadResource->irqContext,
 		TIMERIRQNO, &irqAssert, (NiFpga_Bool*) &(threadResource->irqThreadRdy));
 
@@ -474,19 +453,13 @@ void *Timer_Irq_Thread(void* resource) {
 			NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
 			//Use pos() to get the position of each encoder relative to the starting position
-			//pos(Gamma);
-
-
+			pos(Gamma);
 
 			//Check to see if the platform is out of range or the platforms min/max settings
 				//If so, set the error flag to 1 and servo flag to 0
 				//If not continue
 			//Convert disturbance to correction translation and angles
 			baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
-
-
-			// add here a section that checks if it is out of platform range for sure
-			// put in values from matlab
 
 			// Calculate required leg lengths
 			ErrorFlag = GetLegLengths(P_base, l, legLengths, T, Phi, B, l_max, l_min);
@@ -499,29 +472,24 @@ void *Timer_Irq_Thread(void* resource) {
 			//Set the appropriate state
 			if(Dio_ReadBit(&Ch0) == 0) {
 				OnButton = 1;
-			} else if(Dio_ReadBit(&Ch0) == 1) {
-				OnButton = 0;
 			}
 
 			if(Dio_ReadBit(&Ch1) == 0) {
 				OffButton = 1;
-			} else if(Dio_ReadBit(&Ch1) == 1) {
-				OffButton = 0;
-			}
+			} 
 //			printf("%d", Dio_ReadBit(&Ch0));
 //			printf("%d\n", Dio_ReadBit(&Ch1));
 
 				//Check for Home State
 				if(curr_state == Home) {
+					OnCounter++;
 					if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
 						curr_state = Responding;
 					} else if(ErrorFlag == 1 && OffButton == 0) {
 						curr_state = Error;
-					} else if(OffButton == 1 && OnCounter == 1000) {
+					} else if(OffButton == 1 && OnCounter >= 100) {
 						//curr_state = Home;
 						curr_state = Exxit;
-					} else {
-						curr_state = Home;
 					}
 				}
 
@@ -532,8 +500,6 @@ void *Timer_Irq_Thread(void* resource) {
 					} else if(OffButton == 1) {
 						curr_state = Home;
 						OnCounter = 0;
-					} else {
-						curr_state = Responding;
 					}
 				}
 
@@ -545,28 +511,18 @@ void *Timer_Irq_Thread(void* resource) {
 						curr_state = Error;
 					} else if(OffButton == 1) {
 						curr_state = Home;
-					} else {
-						curr_state = Error;
 					}
-
 				}
 
-			//Set the buttons and errors back to normal for the next time through
-				ErrorFlag = 0;
-				OffButton = 0;
-				OnButton = 0;
 			//run the current state
 			if(curr_state != Exxit) {
 				state_table[curr_state]();
 			}
 
-			OnCounter++;
-
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
 			Irq_Acknowledge(irqAssert);
 		}
 	}
-
 	//Terminate the new thread and return the function
 	pthread_exit(NULL);
 	return NULL;
@@ -590,7 +546,6 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 		
 	}
 	
-
 	// find length of each leg vector
 	for (i = 0; i < 6; i++) {
 		legLengths[i] = sqrt(l[1][i]*l[1][i] + l[2][i]*l[2][i] + l[3][i]*l[3][i]);
@@ -625,10 +580,6 @@ void responding(void) {
 }
 
 void error(void) {
-
-}
-
-void exit(void) {
 
 }
 
