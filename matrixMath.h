@@ -13,8 +13,8 @@ void matrixMultiply31x31(double v1[3], double v2[3], double result[3]);
 void matrixMultiply33x31(double R[3][3], double v[3], double result[3]);
 void matrixMultiply33x33(double A[3][3], double B[3][3], double result[3][3]);
 void vectorScalarMultiply(double v[3], double scalar, double result[3]);
-double* matrixAdd33x33(double A[3][3], double B[3][3]);
-double* matrixSubtract33x33(double A[3][3], double B[3][3]);
+void matrixAdd33x33(double A[3][3], double B[3][3], double result[3][3]);
+void matrixSubtract33x33(double A[3][3], double B[3][3], double result[3][3]);
 
 #endif
 
