@@ -16,10 +16,7 @@
 #include <unistd.h>
 #include <MyRio1900.h>
 #include "DIO.h"
-//#include "StewartPlatformConstants.h"
-//#include "StewartPlatform.c"
 #include "conC_Encoder_initialize.h"
-#include "conC_Encoder_initialize.c"
 #include "matrixMath.h"
 #include "baseToStaticPlatformPosition.h"
 #include "servoCalc.h"
@@ -66,7 +63,8 @@ void pos(double PosDeg[3]);
 void home(void);
 void responding(void);
 void error(void);
-
+int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double B[3][6], double P[3][6], double l_max, double l_min);
+	
 /* Define an enumerated type for states */
 typedef enum {Home, Responding, Error, Exxit} State_Type;
 
@@ -145,7 +143,7 @@ void InitializePWM(void) {
 
 	//Create the PWM channel structures
 
-	static MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	/*
 	 * Initialize the PWM struct with registers from the FPGA personality.
@@ -402,7 +400,9 @@ void *Timer_Irq_Thread(void* resource) {
 	const double B[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
 							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
 							{0, 0, 0, 0, 0, 0}}; // base dimensions in base reference frame
-	const double P[3][6] = B; // platform dimensions in platform reference frame
+	const double P[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
+							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
+							{0, 0, 0, 0, 0, 0}}; // platform dimensions in platform reference frame
 	const double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
 	const double servoRotationRange = 180; // degrees
 	const double alphaMax = *alpha0 + 0.5*servoRotationRange;
@@ -462,7 +462,7 @@ void *Timer_Irq_Thread(void* resource) {
 			baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
 
 			// Calculate required leg lengths
-			ErrorFlag = GetLegLengths(P_base, l, legLengths, T, Phi, B, l_max, l_min);
+			ErrorFlag = GetLegLengths(P_base, l, legLengths, T, Phi, B, P, l_max, l_min);
 
 			//Take the Base position and calculate the required servo correction
 				//If the correction is outside the servos range, set the error flag to 1 and servo flag to 0
@@ -528,9 +528,11 @@ void *Timer_Irq_Thread(void* resource) {
 	return NULL;
 }
 
-int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double P[3][6], double B[3][6], double l_max, double l_min) {
+int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double B[3][6], double P[3][6], double l_max, double l_min) {
 	double R[3][3];
 	double V[3];
+	double dummyVector1[3];
+	double dummyVector2[3];
 	int i, j;
 	int errorFlag = 0;
 	
@@ -539,7 +541,9 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 
 	// find vector of each leg, l = (T + R*P) - B
 	for (i = 0; i<6; i++) {
-		V = matrixSubtract33x33(matrixAdd33x33(T,matrixMultiply33x31(R,P)), B);
+		matrixMultiply33x31(R,P, dummyVector1);
+		matrixAdd33x33(T,dummyVector1, dummyVector2);
+		matrixSubtract33x33(dummyVector2, B, V);
 		for (j=0; j<3; j++) {
 			l[j][i] = V[j];
 		}
@@ -548,12 +552,14 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 	
 	// find length of each leg vector
 	for (i = 0; i < 6; i++) {
-		legLengths[i] = sqrt(l[1][i]*l[1][i] + l[2][i]*l[2][i] + l[3][i]*l[3][i]);
+		legLengths[i] = sqrt(l[0][i]*l[0][i] + l[1][i]*l[1][i] + l[2][i]*l[2][i]);
 		// check if leg lengths are too long or short
 		if (legLengths[i] < l_min || legLengths[i] > l_max) {
 			errorFlag = 1;
 		}
-		vectorAdd(l[3][i], P[3][i], P_base[3][i]); // find platform positions 
+		for (j = 0; j < 3; j++){
+			P_base[j][i] = l[j][i] + B[j][i]; // find platform positions 
+		}
 	}
 
 	return errorFlag;
