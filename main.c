@@ -37,6 +37,7 @@ typedef struct { // define thread resource structure
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
 static double ZeroAngles[] = { 0, 0, 0, 0, 0, 0 };
 static double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
+static double alpha[6] = {10, 10, 10, 10, 10, 10};
 MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM channels
 
 //Declare the digital input channels
@@ -417,7 +418,6 @@ void *Timer_Irq_Thread(void* resource) {
 	double Phi_desired[3] = {0, 0, 0};
 	double D[3] = {0, 0, 0};
 	double Gamma[3]; // pitch and roll of platform
-	double alpha[6];
 	double l[3][6];
 	
 	int OnCounter = 0;
@@ -467,7 +467,7 @@ void *Timer_Irq_Thread(void* resource) {
 			//Take the Base position and calculate the required servo correction
 				//If the correction is outside the servos range, set the error flag to 1 and servo flag to 0
 				//If not continue
-			ErrorFlag = servoCalc(alpha, P_base, B, l, s, a, beta, alphaMax, alphaMin);
+			ErrorFlag = servoCalc(alpha, P_base, B, legLengths, s, a, beta, alphaMax, alphaMin);
 
 			//Set the appropriate state
 			if(Dio_ReadBit(&Ch0) == 0) {
@@ -530,7 +530,7 @@ void *Timer_Irq_Thread(void* resource) {
 
 int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double B[3][6], double P[3][6], double l_max, double l_min) {
 	double R[3][3];
-	double V[3];
+	double B_i[3];
 	double dummyVector1[3];
 	double dummyVector2[3];
 	int i, j;
@@ -542,10 +542,9 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 	// find vector of each leg, l = (T + R*P) - B
 	for (i = 0; i<6; i++) {
 		matrixMultiply33x31(R,P, dummyVector1);
-		matrixAdd33x33(T,dummyVector1, dummyVector2);
-		matrixSubtract33x33(dummyVector2, B, V);
 		for (j=0; j<3; j++) {
-			l[j][i] = V[j];
+			dummyVector2[j] = T[j] + dummyVector1[j];
+			l[j][i] = dummyVector2[j] - B[j][i];
 		}
 		
 	}
@@ -581,7 +580,7 @@ void responding(void) {
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
-	MoveServos(DesiredAngles, PWM_Channels);
+	MoveServos(alpha, PWM_Channels);
 
 }
 

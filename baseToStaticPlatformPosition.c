@@ -1,4 +1,5 @@
 #include "baseToStaticPlatformPosition.h"
+#include "matrixMath.h"
 
 void baseToStaticPlatformPosition(double BP[3], double correctionAngles[3], double D[3], double Gamma[3], double T[3], double Phi[3], double h0) {
     double M[3][3];
@@ -16,7 +17,7 @@ void baseToStaticPlatformPosition(double BP[3], double correctionAngles[3], doub
 
     // R * (OP - D)
     double temp[3];
-    matrixMultiply(M, OP_minus_D, temp);
+    matrixMultiply33x31(M, OP_minus_D, temp);
 
     // D + R*(OP - D)
     for (i = 0; i < 3; i++) {
