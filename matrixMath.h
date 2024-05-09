@@ -3,6 +3,7 @@
 
 /* prototypes */
 double deg2rad(double degrees);
+double rad2deg(double rad);
 void rotX(double angles[3], double R[3][3]);
 void rotY(double angles[3], double R[3][3]);
 void rotZ(double angles[3], double R[3][3]);

@@ -29,8 +29,6 @@ extern NiFpga_Session myrio_session;
 typedef struct { // define thread resource structure
 	NiFpga_IrqContext irqContext; 			// context
 	NiFpga_Bool irqThreadRdy; 			// ready flag
-	NiFpga_Bool errorFlag;					//ErrorFlag for calculations
-	NiFpga_Bool servoMode;				//Servo movement Mode
 } ThreadResource;
 
 /* global variables */
@@ -102,10 +100,6 @@ int main(int argc, char **argv) {
 	irqTimer0.timerWrite = IRQTIMERWRITE;
 	irqTimer0.timerSet = IRQTIMERSETTIME;
 	timeoutValue = 200;
-
-	//Set the default parameters for the error flag and servo mode
-	irqThread0.errorFlag = 0;
-	irqThread0.servoMode = 0;
 
 	//Register the Timer IRQ
 	status = Irq_RegisterTimerIrq(&irqTimer0, &irqThread0.irqContext,
@@ -350,11 +344,11 @@ void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 	MyRio_Pwm *PWM6 = PWM_Channels + 5;
 
 	//Change the PWM Counter compare value to the needed one for the given desired angle for that specific signal
-	Pwm_CounterCompare(PWM1, GetPulse(Angles[0]));
+	Pwm_CounterCompare(PWM1, GetPulse(-Angles[0]));
 	Pwm_CounterCompare(PWM2, GetPulse(Angles[1]));
-	Pwm_CounterCompare(PWM3, GetPulse(Angles[2]));
+	Pwm_CounterCompare(PWM3, GetPulse(-Angles[2]));
 	Pwm_CounterCompare(PWM4, GetPulse(Angles[3]));
-	Pwm_CounterCompare(PWM5, GetPulse(Angles[4]));
+	Pwm_CounterCompare(PWM5, GetPulse(-Angles[4]));
 	Pwm_CounterCompare(PWM6, GetPulse(Angles[5]));
 
 }
@@ -397,11 +391,11 @@ void *Timer_Irq_Thread(void* resource) {
 	const double l_max = s+a; // maximum extension of leg
 	const double l_min = s-a; // minimum extension of leg
 	const double h0 = 10.198039; // home height
-	const double beta[6] = {510.0, -30.0, 270.0, 90.0, 390.0, 210.0};
-	const double B[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
+	double beta[6] = {510.0, -30.0, 270.0, 90.0, 390.0, 210.0};
+	double B[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
 							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
 							{0, 0, 0, 0, 0, 0}}; // base dimensions in base reference frame
-	const double P[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
+	double P[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
 							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
 							{0, 0, 0, 0, 0, 0}}; // platform dimensions in platform reference frame
 	const double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
@@ -530,7 +524,7 @@ void *Timer_Irq_Thread(void* resource) {
 
 int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double B[3][6], double P[3][6], double l_max, double l_min) {
 	double R[3][3];
-	double B_i[3];
+	double P_i[3];
 	double dummyVector1[3];
 	double dummyVector2[3];
 	int i, j;
@@ -541,7 +535,10 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 
 	// find vector of each leg, l = (T + R*P) - B
 	for (i = 0; i<6; i++) {
-		matrixMultiply33x31(R,P, dummyVector1);
+		for (j = 0; j<3; j++) {
+			P_i = P[j][i];
+		}
+		matrixMultiply33x31(R,P_i, dummyVector1);
 		for (j=0; j<3; j++) {
 			dummyVector2[j] = T[j] + dummyVector1[j];
 			l[j][i] = dummyVector2[j] - B[j][i];
