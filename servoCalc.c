@@ -13,8 +13,8 @@ int servoCalc(double alpha[6], double P_base[3][6], double B[3][6], double legLe
         foo = L / sqrt(M * M + N * N);
         if (foo < -1 || foo > 1) {
             errorFlag = 1;
+            foo = fmax(-1, fmin(1, foo)); // Clamping foo to be within [-1, 1]
         }
-        foo = fmax(-1, fmin(1, foo)); // Clamping foo to be within [-1, 1]
         alpha[i] = rad2deg(asin(foo)) - rad2deg(atan2(N, M));
         if (isnan(alpha[i])) {
             alpha[i] = 0;

@@ -344,12 +344,12 @@ void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 	MyRio_Pwm *PWM6 = PWM_Channels + 5;
 
 	//Change the PWM Counter compare value to the needed one for the given desired angle for that specific signal
-	Pwm_CounterCompare(PWM1, GetPulse(-Angles[0]));
-	Pwm_CounterCompare(PWM2, GetPulse(Angles[1]));
-	Pwm_CounterCompare(PWM3, GetPulse(-Angles[2]));
-	Pwm_CounterCompare(PWM4, GetPulse(Angles[3]));
-	Pwm_CounterCompare(PWM5, GetPulse(-Angles[4]));
-	Pwm_CounterCompare(PWM6, GetPulse(Angles[5]));
+	Pwm_CounterCompare(PWM1, GetPulse(Angles[1]));
+	Pwm_CounterCompare(PWM2, GetPulse(-Angles[0]));
+	Pwm_CounterCompare(PWM3, GetPulse(Angles[5]));
+	Pwm_CounterCompare(PWM4, GetPulse(-Angles[4]));
+	Pwm_CounterCompare(PWM5, GetPulse(Angles[3]));
+	Pwm_CounterCompare(PWM6, GetPulse(-Angles[2]));
 
 }
 
@@ -447,7 +447,7 @@ void *Timer_Irq_Thread(void* resource) {
 			NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
 			//Use pos() to get the position of each encoder relative to the starting position
-			pos(Gamma);
+			// pos(Gamma);
 
 			//Check to see if the platform is out of range or the platforms min/max settings
 				//If so, set the error flag to 1 and servo flag to 0
@@ -536,7 +536,7 @@ int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], dou
 	// find vector of each leg, l = (T + R*P) - B
 	for (i = 0; i<6; i++) {
 		for (j = 0; j<3; j++) {
-			P_i = P[j][i];
+			P_i[j] = P[j][i];
 		}
 		matrixMultiply33x31(R,P_i, dummyVector1);
 		for (j=0; j<3; j++) {
