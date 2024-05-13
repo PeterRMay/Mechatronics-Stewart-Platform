@@ -2,9 +2,9 @@
 #include <math.h>
 
 void rotZYX(double angles[3], double R[3][3]) {
-    double psi = angles[0];   
-    double theta = angles[1]; 
-    double phi = angles[2];   
+    double psi = deg2rad(angles[2]);   
+    double theta = deg2rad(angles[1]); 
+    double phi = deg2rad(angles[0]);   
 
     R[0][0] = cos(psi)*cos(theta);
     R[0][1] = -sin(psi)*cos(phi) + cos(psi)*sin(theta)*sin(phi);
