@@ -29,11 +29,11 @@ function [alpha] = servoCalc(P_base_i,B_i,l,s,a,beta,maxAlphaRange,minAlphaRange
     end
     alpha = real(alpha);
 
-    if alpha > maxAlphaRange
-        alpha = maxAlphaRange;
-    elseif alpha < minAlphaRange
-        alpha = minAlphaRange;
-    end
+%     if alpha > maxAlphaRange
+%         alpha = maxAlphaRange;
+%     elseif alpha < minAlphaRange
+%         alpha = minAlphaRange;
+%     end
 end
 
 

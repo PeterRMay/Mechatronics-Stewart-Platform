@@ -43,10 +43,10 @@ static MyRio_Dio Ch0;
 static MyRio_Dio Ch1;
 
 // servo data
-double AngleRange = 200;
+double AngleRange = 180;
 double MaxCount = 3125;
 double MinCount = 625;
-double ZeroPosition = 200;
+double ZeroPosition = 90;
 
 double EncoderCountRev = 8094;
 double DegPerRev = 360;
@@ -576,11 +576,11 @@ void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 	MyRio_Pwm *PWM6 = PWM_Channels + 5;
 
 	//Change the PWM Counter compare value to the needed one for the given desired angle for that specific signal
-	Pwm_CounterCompare(PWM1, GetPulse(Angles[1]));
-	Pwm_CounterCompare(PWM2, GetPulse(-Angles[0]));
-	Pwm_CounterCompare(PWM3, GetPulse(Angles[5]));
-	Pwm_CounterCompare(PWM4, GetPulse(-Angles[4]));
-	Pwm_CounterCompare(PWM5, GetPulse(Angles[3]));
-	Pwm_CounterCompare(PWM6, GetPulse(-Angles[2]));
+	Pwm_CounterCompare(PWM1, GetPulse(Angles[0]));
+	Pwm_CounterCompare(PWM2, GetPulse(-Angles[1]));
+	Pwm_CounterCompare(PWM3, GetPulse(Angles[2]));
+	Pwm_CounterCompare(PWM4, GetPulse(-Angles[3]));
+	Pwm_CounterCompare(PWM5, GetPulse(Angles[4]));
+	Pwm_CounterCompare(PWM6, GetPulse(-Angles[5]));
 
 }
