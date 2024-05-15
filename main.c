@@ -20,6 +20,7 @@
 #include "matrixMath.h"
 #include "baseToStaticPlatformPosition.h"
 #include "servoCalc.h"
+#include "matlabfiles.h"
 
 
 extern NiFpga_Session myrio_session;
@@ -30,12 +31,13 @@ typedef struct { // define thread resource structure
 	NiFpga_IrqContext irqContext; 			// context
 	NiFpga_Bool irqThreadRdy; 			// ready flag
 } ThreadResource;
+#define BUFLENGTH 6000 // 2 min of data at 50hz
 
 /* global variables */
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
 static double ZeroAngles[] = { 0, 0, 0, 0, 0, 0 };
 static double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
-static double alpha[6] = {10, 10, 10, 10, 10, 10};
+static double alpha[6] = {0, 0, 0, 0, 0, 0};
 MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM channels
 
 //Declare the digital input channels
@@ -43,6 +45,7 @@ static MyRio_Dio Ch0;
 static MyRio_Dio Ch1;
 
 // servo data
+static double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
 double AngleRange = 180;
 double MaxCount = 3125;
 double MinCount = 625;
@@ -176,7 +179,6 @@ void *Timer_Irq_Thread(void* resource) {
 	double P[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
 							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
 							{0, 0, 0, 0, 0, 0}}; // platform dimensions in platform reference frame
-	const double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
 	const double servoRotationRange = 180; // degrees
 	const double alphaMax = *alpha0 + 0.5*servoRotationRange;
 	const double alphaMin = *alpha0 - 0.5*servoRotationRange;
@@ -192,10 +194,32 @@ void *Timer_Irq_Thread(void* resource) {
 	double Gamma[3]; // pitch and roll of platform
 	double l[3][6];
 	
+	// Platform transition logic variables
 	int OnCounter = 0;
 	int ErrorFlag = 0;
 	NiFpga_Bool OnButton = NiFpga_False;
 	NiFpga_Bool OffButton = NiFpga_False;
+
+	int i; // for loop counter
+
+	// Matlab arrays
+	double gammaArray[3][BUFLENGTH];
+	double IMUArray[3][BUFLENGTH];
+	double TCommandedArray[3][BUFLENGTH];
+	double PhiCommandedArray[3][BUFLENGTH];
+	double legLengthsArray[6][BUFLENGTH];
+	double alphaArray[6][BUFLENGTH];
+	int outOfRange[BUFLENGTH];
+	// pointers for stepping through arrays
+	double* gammaPointer = gammaArray;
+	double* IMUPointer = IMUArray;
+	double* TCommandedPointer = TCommandedArray;
+	double* PhiCommandedPointer = PhiCommandedArray;
+	double* legLengthsPointer = legLengthsArray;
+	double* alphaPointer = alphaArray;
+	double* outOfRangePointer = outOfRange;
+
+
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
 	 *  - It will wait for the occurrence( or timeout) of the IRQ
@@ -289,11 +313,26 @@ void *Timer_Irq_Thread(void* resource) {
 			if(curr_state != Exxit) {
 				state_table[curr_state]();
 			}
+			if (torquePointer < torque + BUFLENGTH) *torquePointer++ = torqueVal;
 
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
 			Irq_Acknowledge(irqAssert);
 		}
 	}
+
+	int err; // indicates matlab file save success
+	MATFILE* mf; // matlab file
+	mf=openmatfile("StewartData.mat", &err);
+    if(!mf) printf("Can't open matfile%d\n",err);
+    else printf("MATLAB file opened successfully.\n");
+    matfile_addstring(mf,"day", "05152024");
+    matfile_addmatrix(mf, "torque", torque, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf, "Pref", PrefData, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf,"Pact",PactData, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf,"BTI",&BTI_length,1,1, 0);
+    matfile_addmatrix(mf,"PIDF",(double*)PIDF, 6, 1, 0); // update to match var name of filter
+    matfile_close(mf);
+
 	//Terminate the new thread and return the function
 	pthread_exit(NULL);
 	return NULL;
@@ -354,7 +393,7 @@ void responding(void) {
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
-	MoveServos(DesiredAngles, PWM_Channels);
+	MoveServos(alphaCorrected, PWM_Channels);
 
 }
 
@@ -567,6 +606,14 @@ double GetPulse(double DesiredAngle) {
 
 void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 
+	double anglesCorrected[6];
+	int i;
+
+	// Account for servo arm offset
+	for (i = 0; i < 6; i++) {
+		anglesCorrected[i] = Angles[i] - alpha0[i];
+	}
+
 	//Create Pointers to the Individual PWM Structures that we fed in
 	MyRio_Pwm *PWM1 = PWM_Channels;
 	MyRio_Pwm *PWM2 = PWM_Channels + 1;
@@ -576,11 +623,11 @@ void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 	MyRio_Pwm *PWM6 = PWM_Channels + 5;
 
 	//Change the PWM Counter compare value to the needed one for the given desired angle for that specific signal
-	Pwm_CounterCompare(PWM1, GetPulse(Angles[0]));
-	Pwm_CounterCompare(PWM2, GetPulse(-Angles[1]));
-	Pwm_CounterCompare(PWM3, GetPulse(Angles[2]));
-	Pwm_CounterCompare(PWM4, GetPulse(-Angles[3]));
-	Pwm_CounterCompare(PWM5, GetPulse(Angles[4]));
-	Pwm_CounterCompare(PWM6, GetPulse(-Angles[5]));
+	Pwm_CounterCompare(PWM1, GetPulse(anglesCorrected[0]));
+	Pwm_CounterCompare(PWM2, GetPulse(-anglesCorrected[1]));
+	Pwm_CounterCompare(PWM3, GetPulse(anglesCorrected[2]));
+	Pwm_CounterCompare(PWM4, GetPulse(-anglesCorrected[3]));
+	Pwm_CounterCompare(PWM5, GetPulse(anglesCorrected[4]));
+	Pwm_CounterCompare(PWM6, GetPulse(-anglesCorrected[5]));
 
 }
