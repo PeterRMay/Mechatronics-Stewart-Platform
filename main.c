@@ -205,19 +205,22 @@ void *Timer_Irq_Thread(void* resource) {
 	// Matlab arrays
 	double gammaArray[3][BUFLENGTH];
 	double IMUArray[3][BUFLENGTH];
-	double TCommandedArray[3][BUFLENGTH];
-	double PhiCommandedArray[3][BUFLENGTH];
+	double TArray[3][BUFLENGTH];
+	double PhiArray[3][BUFLENGTH];
 	double legLengthsArray[6][BUFLENGTH];
 	double alphaArray[6][BUFLENGTH];
 	int outOfRange[BUFLENGTH];
 	// pointers for stepping through arrays
+	int ArrayCounter = 0;
+	/*
 	double* gammaPointer = gammaArray;
 	double* IMUPointer = IMUArray;
-	double* TCommandedPointer = TCommandedArray;
-	double* PhiCommandedPointer = PhiCommandedArray;
+	double* TPointer = TCommandedArray;
+	double* PhiPointer = PhiCommandedArray;
 	double* legLengthsPointer = legLengthsArray;
 	double* alphaPointer = alphaArray;
 	double* outOfRangePointer = outOfRange;
+	*/
 
 
 
@@ -313,6 +316,23 @@ void *Timer_Irq_Thread(void* resource) {
 			if(curr_state != Exxit) {
 				state_table[curr_state]();
 			}
+			if (ArrayCounter < BUFLENGTH) {
+				for (i = 0; i < 3; i++){
+					gammaArray[i][ArrayCounter] = Gamma[i];
+					// put IMU array here
+					TArray[i][ArrayCounter] = T[i];
+					PhiArray[i][ArrayCounter] = Phi[i];
+				}
+				for (i = 0; i < 6; i++){
+					legLengthsArray[i][ArrayCounter] = legLengths[i];
+					alphaArray[i][ArrayCounter] = alpha[i];
+				}
+				if (ErrorFlag = 1) {
+					outOfRange[ArrayCounter] = 1;
+				}
+
+				ArrayCounter++;
+			}
 			if (torquePointer < torque + BUFLENGTH) *torquePointer++ = torqueVal;
 
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
@@ -326,11 +346,12 @@ void *Timer_Irq_Thread(void* resource) {
     if(!mf) printf("Can't open matfile%d\n",err);
     else printf("MATLAB file opened successfully.\n");
     matfile_addstring(mf,"day", "05152024");
-    matfile_addmatrix(mf, "torque", torque, BUFLENGTH, 1, 0);
-    matfile_addmatrix(mf, "Pref", PrefData, BUFLENGTH, 1, 0);
-    matfile_addmatrix(mf,"Pact",PactData, BUFLENGTH, 1, 0);
-    matfile_addmatrix(mf,"BTI",&BTI_length,1,1, 0);
-    matfile_addmatrix(mf,"PIDF",(double*)PIDF, 6, 1, 0); // update to match var name of filter
+    matfile_addmatrix(mf, "gamma", gammaArray, BUFLENGTH, 3, 0);
+    matfile_addmatrix(mf, "T", TArray, BUFLENGTH, 3, 0);
+    matfile_addmatrix(mf,"Phi", PhiArray, BUFLENGTH, 3, 0);
+	matfile_addmatrix(mf,"legLengths", legLengthsArray, BUFLENGTH, 6, 0);
+	matfile_addmatrix(mf,"alpha", alphaArray, BUFLENGTH, 6, 0);
+	matfile_addmatrix(mf,"outOfRange", outOfRange, BUFLENGTH, 1, 0);
     matfile_close(mf);
 
 	//Terminate the new thread and return the function
@@ -393,7 +414,7 @@ void responding(void) {
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
-	MoveServos(alphaCorrected, PWM_Channels);
+	MoveServos(alpha, PWM_Channels);
 
 }
 
