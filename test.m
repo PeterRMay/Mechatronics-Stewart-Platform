@@ -1,16 +1,31 @@
 clc
 close
-T = [0;0;0];
-Phi = [0;0;0];
+clear all;
+h0 = 10.1980;
+% T = [-1.795553042106053;-0.0079165014049170992;10.038721335285196];
+Phi = [0;8.09488510007413;0];
+zeroVector = zeros(3,1);
+T = zeroVector;
+Phi = zeroVector;
+% T(3) = 1;
 
-stdPlatformBaseRatio = 1/2;
-stdArmLegRatio = 0.1495;
-stdRestingLegLength = 11;
-stdRadius = 6;
+[T, Phi] = baseToStaticPlatformPosition(T,Phi,zeroVector,zeroVector,h0);
+T(3) = h0-T(3);
+
+stdPlatformBaseRatio = 1;
+% stdArmLegRatio = 0.20;
+
+a = 2;
+s = 10;
+stdArmLegRatio = a / s;
+stdRestingLegLength= sqrt(s.^2*(1+stdArmLegRatio));
+
+% stdRestingLegLength = 11;
+stdRadius = 5;
 stdServoRange = 180;
 stdServoOffset = 120;
 stdBallJointRange = 25/2;
-stdAngleBetweenLegPairs = 30;
+stdAngleBetweenLegPairs = 60;
 
 platformParams = struct;
 platformParams.armlegratio = stdArmLegRatio;

@@ -15,7 +15,7 @@ int servoCalc(double alpha[6], double P_base[3][6], double B[3][6], double legLe
             errorFlag = 1;
             foo = fmax(-1, fmin(1, foo)); // Clamping foo to be within [-1, 1]
         }
-        alpha[i] = rad2deg(asin(foo)) - rad2deg(atan2(N, M));
+        alpha[i] = rad2deg(asin(foo) - atan2(N, M));
         if (isnan(alpha[i])) {
             alpha[i] = 0;
             errorFlag = 1;

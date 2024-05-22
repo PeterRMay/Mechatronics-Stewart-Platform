@@ -44,12 +44,20 @@ function errorFlag = StewartPlatformEqs(T,Phi, platformParams, plotBool, display
     end
     
     % p[] distances from origin of platform to the joints
-    p = b*platformBaseRatio; % make top platform smaller than bottom
-    defaultPlatformRotation = 60;
+%     p = b*platformBaseRatio; % make top platform smaller than bottom
+%     defaultPlatformRotation = 60;
+%     for i = 1:6
+%         p(:,i) = rotz(defaultPlatformRotation) * p(:,i); % rotate top platform
+%     end
+    pradius = 4.36;
+    p1 = [pradius;0;0];
+    offsetangle = asind(0.5/pradius);
+    p = zeros(3,6);
+    pangles = [60-offsetangle,60+offsetangle,180-offsetangle,180+offsetangle,300-offsetangle,300+offsetangle];
     for i = 1:6
-        p(:,i) = rotz(defaultPlatformRotation) * p(:,i); % rotate top platform
+        p(:,i) = rotz(pangles(i))*p1;
     end
-    p = circshift(p,[0 1]); % shift matrix to shift which legs connect to which joints
+%     p = circshift(p,[0 1]); % shift matrix to shift which legs connect to which joints
     
     %% define home location
     beta = zeros(1,6); % angle between servo arm and x axis in the xy plane
@@ -57,10 +65,10 @@ function errorFlag = StewartPlatformEqs(T,Phi, platformParams, plotBool, display
     % through the center of the platform. This can be adjusted based on
     % construction
     for i = 1:2:6
-        beta(i) = legAngles(i) + servoOffset; % note this differs from the document, in the document beta is only for even legs
+        beta(i) = legAngles(i) - servoOffset; % note this differs from the document, in the document beta is only for even legs
     end
     for i = 2:2:6
-        beta(i) = legAngles(i) - servoOffset;
+        beta(i) = legAngles(i) + servoOffset;
     end
     
     % we now define the home height, h0, assuming 90 degrees between the arms
@@ -168,8 +176,15 @@ function errorFlag = StewartPlatformEqs(T,Phi, platformParams, plotBool, display
         servoArms = zeros(3,6);
         for i = 1:6
         %     plot3([b(1,i) P_base(1,i)], [b(2,i) P_base(2,i)], [b(3,i) P_base(3,i)]); % plot straight leg lengths
+            if i == 1
+                color = 'red';
+            elseif i == 2
+                    color = 'green';
+            else
+                color = 'black';
+            end
             servoArms(:,i) = b(:,i) + a * rotz(beta(i)) * roty(-alpha(i)) * [1; 0; 0]; % calculate arm positions
-            plotVector(b(:,i), servoArms(:,i), 'black') % plot arm positions
+            plotVector(b(:,i), servoArms(:,i), color) % plot arm positions
             plotVector(servoArms(:,i), P_base(:,i),'green') % plot leg positions
         end        
 

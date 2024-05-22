@@ -31,7 +31,15 @@ typedef struct { // define thread resource structure
 	NiFpga_IrqContext irqContext; 			// context
 	NiFpga_Bool irqThreadRdy; 			// ready flag
 } ThreadResource;
-#define BUFLENGTH 6000 // 2 min of data at 50hz
+struct biquad {
+    double b0; double b1; double b2; // numerator
+    double a0; double a1; double a2; // denominator
+    double x0; double x1; double x2; // input
+    double y1; double y2; }; // output
+#define BUFLENGTH 3000 // 1 min of data at 50hz
+#define ALPHA0 17.1949 // home servo position
+#define SATURATE(x,lo,hi) ((x) < (lo) ? (lo) : (x) > (hi) ? (hi) : (x)) // limits a signal to a low or high value
+
 
 /* global variables */
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
@@ -45,14 +53,43 @@ static MyRio_Dio Ch0;
 static MyRio_Dio Ch1;
 
 // servo data
-static double alpha0[6] = {11.309932, 11.309932, 11.309932, 11.309932, 11.309932, 11.309932}; // home servo position, servo arms are at 90deg to legs
+static double alpha0[6] = {ALPHA0, ALPHA0, ALPHA0, ALPHA0, ALPHA0, ALPHA0}; // home servo position, servo arms are at 90deg to legs
 double AngleRange = 180;
 double MaxCount = 3125;
 double MinCount = 625;
 double ZeroPosition = 90;
-
+// encoder data
 double EncoderCountRev = 8094;
 double DegPerRev = 360;
+
+// Matlab arrays
+static double gammaArrayX[BUFLENGTH];
+static double gammaArrayY[BUFLENGTH];
+static double gammaArrayZ[BUFLENGTH];
+static double IMUArrayX[BUFLENGTH];
+static double IMUArrayY[BUFLENGTH];
+static double IMUArrayZ[BUFLENGTH];
+static double TArrayX[BUFLENGTH];
+static double TArrayY[BUFLENGTH];
+static double TArrayZ[BUFLENGTH];
+static double PhiArrayX[BUFLENGTH];
+static double PhiArrayY[BUFLENGTH];
+static double PhiArrayZ[BUFLENGTH];
+static double legLengthsArray1[BUFLENGTH];
+static double legLengthsArray2[BUFLENGTH];
+static double legLengthsArray3[BUFLENGTH];
+static double legLengthsArray4[BUFLENGTH];
+static double legLengthsArray5[BUFLENGTH];
+static double legLengthsArray6[BUFLENGTH];
+static double alphaArray1[BUFLENGTH];
+static double alphaArray2[BUFLENGTH];
+static double alphaArray3[BUFLENGTH];
+static double alphaArray4[BUFLENGTH];
+static double alphaArray5[BUFLENGTH];
+static double alphaArray6[BUFLENGTH];
+static double outOfRange[BUFLENGTH];
+// pointers for stepping through arrays
+static int ArrayCounter = 0;
 
 
 /* prototypes */
@@ -66,7 +103,12 @@ void home(void);
 void responding(void);
 void error(void);
 int GetLegLengths(double P_base[3][6], double l[3][6], double legLengths[6], double T[3], double Phi[3], double B[3][6], double P[3][6], double l_max, double l_min);
-	
+double cascade( double xin, // input
+                struct biquad *fa, // biquad array
+                int ns, // no. segments
+                double ymin, // min output
+                double ymax ); // max output
+
 /* Define an enumerated type for states */
 typedef enum {Home, Responding, Error, Exxit} State_Type;
 
@@ -171,13 +213,13 @@ void *Timer_Irq_Thread(void* resource) {
 	const double a = 2.0;
 	const double l_max = s+a; // maximum extension of leg
 	const double l_min = s-a; // minimum extension of leg
-	const double h0 = 10.198039; // home height
-	double beta[6] = {510.0, -30.0, 270.0, 90.0, 390.0, 210.0};
-	double B[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
-							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
+	const double h0 = 10.0; // home height
+	double beta[6] = {270.0, 210.0, 30.0, 330.0, 150.0, 450.0};
+	double B[3][6] = {{4.3301, 0.0, -4.3301, -4.3301, 0.0, 4.3301},
+							{2.5, 5.0, 2.50, -2.50, -5.0, -2.50},
 							{0, 0, 0, 0, 0, 0}}; // base dimensions in base reference frame
-	double P[3][6] = {{8.660254, 0.0, -8.660254, -8.660254, 0.0, 8.660254},
-							{5.0, 10.0, 5.0, -5.0, -10.0, -5.0},
+	double P[3][6] = {{2.5986, 1.7326, -4.3312, -4.3312, 1.7326, 2.5986},
+							{3.5010, 4.0010, 0.500, -0.50, -4.001, -3.5010},
 							{0, 0, 0, 0, 0, 0}}; // platform dimensions in platform reference frame
 	const double servoRotationRange = 180; // degrees
 	const double alphaMax = *alpha0 + 0.5*servoRotationRange;
@@ -191,38 +233,38 @@ void *Timer_Irq_Thread(void* resource) {
 	double T_desired[3] = {0, 0, 0};
 	double Phi_desired[3] = {0, 0, 0};
 	double D[3] = {0, 0, 0};
-	double Gamma[3]; // pitch and roll of platform
+	double Gamma[3] = {0, 0, 0}; // pitch and roll of platform
+	double GammaFiltered[3];
 	double l[3][6];
 	
 	// Platform transition logic variables
-	int OnCounter = 0;
+	int PreviousOffButton = 0;
 	int ErrorFlag = 0;
 	NiFpga_Bool OnButton = NiFpga_False;
 	NiFpga_Bool OffButton = NiFpga_False;
 
+	// low pass filter
+	int lowPass_ns = 1; // No. of biquad sections
+	double tau = 1; // time constant, s
+	double TS = 0.02; // sample time, s
+	double alphaTF = TS / (2*tau + TS);
+    static struct biquad lowPass[3];
 	int i; // for loop counter
-
-	// Matlab arrays
-	double gammaArray[3][BUFLENGTH];
-	double IMUArray[3][BUFLENGTH];
-	double TArray[3][BUFLENGTH];
-	double PhiArray[3][BUFLENGTH];
-	double legLengthsArray[6][BUFLENGTH];
-	double alphaArray[6][BUFLENGTH];
-	int outOfRange[BUFLENGTH];
-	// pointers for stepping through arrays
-	int ArrayCounter = 0;
-	/*
-	double* gammaPointer = gammaArray;
-	double* IMUPointer = IMUArray;
-	double* TPointer = TCommandedArray;
-	double* PhiPointer = PhiCommandedArray;
-	double* legLengthsPointer = legLengthsArray;
-	double* alphaPointer = alphaArray;
-	double* outOfRangePointer = outOfRange;
-	*/
-
-
+	for (i = 0; i < 3; i++) {
+		(lowPass+i)->a0 = 1.000;
+		(lowPass+i)->a1 = (2*alphaTF - 1);
+		(lowPass+i)->a1 = 0.000;
+		(lowPass+i)->b0 = alphaTF;
+		(lowPass+i)->b1 = alphaTF;
+		(lowPass+i)->b2 = 0.000;
+		(lowPass+i)->x0 = 0.000;
+		(lowPass+i)->x1 = 0.000;
+		(lowPass+i)->x2 = 0.000;
+		(lowPass+i)->y1 = 0.000;
+		(lowPass+i)->y2 = 0.000;
+		
+	}
+	
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
 	 *  - It will wait for the occurrence( or timeout) of the IRQ
@@ -251,7 +293,17 @@ void *Timer_Irq_Thread(void* resource) {
 			NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
 			//Use pos() to get the position of each encoder relative to the starting position
-			// pos(Gamma);
+			pos(Gamma);
+
+			// Run a low pass filter on the encoder readings
+			for (i=0;i<3;i++){
+				GammaFiltered[i] = cascade(Gamma[i],
+											(lowPass+i),
+											lowPass_ns,
+											-180,
+											180);
+			}
+			
 
 			//Check to see if the platform is out of range or the platforms min/max settings
 				//If so, set the error flag to 1 and servo flag to 0
@@ -275,65 +327,77 @@ void *Timer_Irq_Thread(void* resource) {
 			if(Dio_ReadBit(&Ch1) == 0) {
 				OffButton = 1;
 			} 
-//			printf("%d", Dio_ReadBit(&Ch0));
-//			printf("%d\n", Dio_ReadBit(&Ch1));
 
-				//Check for Home State
-				if(curr_state == Home) {
-					OnCounter++;
-					if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
-						curr_state = Responding;
-					} else if(ErrorFlag == 1 && OffButton == 0) {
-						curr_state = Error;
-					} else if(OffButton == 1 && OnCounter >= 100) {
-						//curr_state = Home;
-						curr_state = Exxit;
-					}
+			//Check for Home State
+			if(curr_state == Home) {
+				if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
+					curr_state = Responding;
+				} else if(ErrorFlag == 1 && OffButton == 0) {
+					curr_state = Error;
+				} else if(OffButton == 1 && PreviousOffButton != 1) {
+					//curr_state = Home;
+					curr_state = Exxit;
 				}
+			}
 
-				//Check for Responding State
-				if(curr_state == Responding) {
-					if(ErrorFlag == 1 && OffButton == 0) {
-						curr_state = Error;
-					} else if(OffButton == 1) {
-						curr_state = Home;
-						OnCounter = 0;
-					}
+			//Check for Responding State
+			if(curr_state == Responding) {
+				if(ErrorFlag == 1 && OffButton == 0) {
+					curr_state = Error;
+				} else if(OffButton == 1) {
+					curr_state = Home;
 				}
+			}
 
-				//Check for Error State
-				if(curr_state == Error) {
-					if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
-						curr_state = Home;
-					} else if(ErrorFlag == 1 && OffButton == 0) {
-						curr_state = Error;
-					} else if(OffButton == 1) {
-						curr_state = Home;
-					}
+			//Check for Error State
+			if(curr_state == Error) {
+				if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
+					curr_state = Home;
+				} else if(ErrorFlag == 1 && OffButton == 0) {
+					curr_state = Error;
+				} else if(OffButton == 1) {
+					curr_state = Exxit;
 				}
+			}
 
 			//run the current state
 			if(curr_state != Exxit) {
 				state_table[curr_state]();
 			}
+			
 			if (ArrayCounter < BUFLENGTH) {
-				for (i = 0; i < 3; i++){
-					gammaArray[i][ArrayCounter] = Gamma[i];
-					// put IMU array here
-					TArray[i][ArrayCounter] = T[i];
-					PhiArray[i][ArrayCounter] = Phi[i];
-				}
-				for (i = 0; i < 6; i++){
-					legLengthsArray[i][ArrayCounter] = legLengths[i];
-					alphaArray[i][ArrayCounter] = alpha[i];
-				}
-				if (ErrorFlag = 1) {
+				gammaArrayX[ArrayCounter] = Gamma[0];
+				gammaArrayY[ArrayCounter] = Gamma[1];
+				gammaArrayZ[ArrayCounter] = Gamma[2];
+				TArrayX[ArrayCounter] = T[0];
+				TArrayY[ArrayCounter] = T[1];
+				TArrayZ[ArrayCounter] = T[2];
+				PhiArrayX[ArrayCounter] = Phi[0];
+				PhiArrayY[ArrayCounter] = Phi[1];
+				PhiArrayZ[ArrayCounter] = Phi[2];
+				legLengthsArray1[ArrayCounter] = legLengths[0];
+				legLengthsArray2[ArrayCounter] = legLengths[1];
+				legLengthsArray3[ArrayCounter] = legLengths[2];
+				legLengthsArray4[ArrayCounter] = legLengths[3];
+				legLengthsArray5[ArrayCounter] = legLengths[4];
+				legLengthsArray6[ArrayCounter] = legLengths[5];
+				alphaArray1[ArrayCounter] = alpha[0];
+				alphaArray2[ArrayCounter] = alpha[1];
+				alphaArray3[ArrayCounter] = alpha[2];
+				alphaArray4[ArrayCounter] = alpha[3];
+				alphaArray5[ArrayCounter] = alpha[4];
+				alphaArray6[ArrayCounter] = alpha[5];
+				
+				if (ErrorFlag == 1) {
 					outOfRange[ArrayCounter] = 1;
+				} else {
+					outOfRange[ArrayCounter] = 0;
 				}
 
+				PreviousOffButton = OffButton;
 				ArrayCounter++;
 			}
-			if (torquePointer < torque + BUFLENGTH) *torquePointer++ = torqueVal;
+			
 
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
 			Irq_Acknowledge(irqAssert);
@@ -346,11 +410,27 @@ void *Timer_Irq_Thread(void* resource) {
     if(!mf) printf("Can't open matfile%d\n",err);
     else printf("MATLAB file opened successfully.\n");
     matfile_addstring(mf,"day", "05152024");
-    matfile_addmatrix(mf, "gamma", gammaArray, BUFLENGTH, 3, 0);
-    matfile_addmatrix(mf, "T", TArray, BUFLENGTH, 3, 0);
-    matfile_addmatrix(mf,"Phi", PhiArray, BUFLENGTH, 3, 0);
-	matfile_addmatrix(mf,"legLengths", legLengthsArray, BUFLENGTH, 6, 0);
-	matfile_addmatrix(mf,"alpha", alphaArray, BUFLENGTH, 6, 0);
+    matfile_addmatrix(mf, "gammaX", gammaArrayX, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf, "gammaY", gammaArrayY, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf, "gammaZ", gammaArrayZ, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf, "TX", TArrayX, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf, "TY", TArrayY, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf, "TZ", TArrayZ, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf,"PhiX", PhiArrayX, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf,"PhiY", PhiArrayY, BUFLENGTH, 1, 0);
+    matfile_addmatrix(mf,"PhiZ", PhiArrayZ, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"legLengths1", legLengthsArray1, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"legLengths2", legLengthsArray2, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"legLengths3", legLengthsArray3, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"legLengths4", legLengthsArray4, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"legLengths5", legLengthsArray5, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"legLengths6", legLengthsArray6, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"alpha1", alphaArray1, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"alpha2", alphaArray2, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"alpha3", alphaArray3, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"alpha4", alphaArray4, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"alpha5", alphaArray5, BUFLENGTH, 1, 0);
+	matfile_addmatrix(mf,"alpha6", alphaArray6, BUFLENGTH, 1, 0);
 	matfile_addmatrix(mf,"outOfRange", outOfRange, BUFLENGTH, 1, 0);
     matfile_close(mf);
 
@@ -405,7 +485,7 @@ void home(void) {
 	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Send the servos to the home position
-	MoveServos(ZeroAngles, PWM_Channels);
+	MoveServos(alpha0, PWM_Channels);
 
 }
 
@@ -573,7 +653,7 @@ void pos(double PosDeg[3]) {
 
 	EncoderPosBDI[0] = Cn1 - Cn11;		//get the difference in encoder counts to return for the position of the encoder
 	EncoderPosBDI[1] = Cn2 - Cn12;
-	PosDeg[0] = (EncoderPosBDI[0] / EncoderCountRev) * DegPerRev;
+	PosDeg[0] = -(EncoderPosBDI[0] / EncoderCountRev) * DegPerRev;
 	PosDeg[1] = (EncoderPosBDI[1] / EncoderCountRev) * DegPerRev;
 
 }
@@ -644,11 +724,35 @@ void MoveServos(double Angles[6], MyRio_Pwm *PWM_Channels) {
 	MyRio_Pwm *PWM6 = PWM_Channels + 5;
 
 	//Change the PWM Counter compare value to the needed one for the given desired angle for that specific signal
-	Pwm_CounterCompare(PWM1, GetPulse(anglesCorrected[0]));
-	Pwm_CounterCompare(PWM2, GetPulse(-anglesCorrected[1]));
-	Pwm_CounterCompare(PWM3, GetPulse(anglesCorrected[2]));
-	Pwm_CounterCompare(PWM4, GetPulse(-anglesCorrected[3]));
-	Pwm_CounterCompare(PWM5, GetPulse(anglesCorrected[4]));
-	Pwm_CounterCompare(PWM6, GetPulse(-anglesCorrected[5]));
+	Pwm_CounterCompare(PWM1, GetPulse(-anglesCorrected[0]));
+	Pwm_CounterCompare(PWM2, GetPulse(anglesCorrected[1]));
+	Pwm_CounterCompare(PWM3, GetPulse(-anglesCorrected[2]));
+	Pwm_CounterCompare(PWM4, GetPulse(anglesCorrected[3]));
+	Pwm_CounterCompare(PWM5, GetPulse(-anglesCorrected[4]));
+	Pwm_CounterCompare(PWM6, GetPulse(anglesCorrected[5]));
 
 }
+
+double cascade(
+    double xin, // input
+    struct biquad *fa, // biquad array
+    int ns, // no. segments
+    double ymin, // min output
+    double ymax) // max output
+    {
+        int i; // loop counter
+        struct biquad* f = fa; // biquad pointer
+        double y0 = xin;
+
+        for (i=0;i<ns;i++) {
+            f->x0 = y0; // pass input to current biquad
+            y0 = (1/f->a0)*(f->b0*f->x0 + f->b1*f->x1 + f->b2*f->x2 - f->a1*f->y1 - f->a2*f->y2);
+            f->x2 = f->x1; // update biquad values
+            f->x1 = f->x0;
+            f->y2 = f->y1;
+            f->y1 = y0;
+            f++;         // go to next biquad
+        }
+        y0 = SATURATE(y0,ymin,ymax);
+        return y0;
+    }
