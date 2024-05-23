@@ -245,7 +245,7 @@ void *Timer_Irq_Thread(void* resource) {
 
 	// low pass filter
 	int lowPass_ns = 1; // No. of biquad sections
-	double tau = 1; // time constant, s
+	double tau = 0.1; // time constant, s
 	double TS = 0.02; // sample time, s
 	double alphaTF = TS / (2*tau + TS);
     static struct biquad lowPass[3];
@@ -253,7 +253,7 @@ void *Timer_Irq_Thread(void* resource) {
 	for (i = 0; i < 3; i++) {
 		(lowPass+i)->a0 = 1.000;
 		(lowPass+i)->a1 = (2*alphaTF - 1);
-		(lowPass+i)->a1 = 0.000;
+		(lowPass+i)->a2 = 0.000;
 		(lowPass+i)->b0 = alphaTF;
 		(lowPass+i)->b1 = alphaTF;
 		(lowPass+i)->b2 = 0.000;
@@ -262,7 +262,6 @@ void *Timer_Irq_Thread(void* resource) {
 		(lowPass+i)->x2 = 0.000;
 		(lowPass+i)->y1 = 0.000;
 		(lowPass+i)->y2 = 0.000;
-		
 	}
 	
 
