@@ -248,7 +248,7 @@ void *Timer_Irq_Thread(void* resource) {
 
 	// low pass filter
 	int lowPass_ns = 1; // No. of biquad sections
-	double tau = 0.1; // time constant, s
+	double tau = 0.05; // time constant, s
 	double TS = 0.02; // sample time, s
 	double alphaTF = TS / (2*tau + TS);
     static struct biquad lowPass[3];
@@ -279,7 +279,7 @@ void *Timer_Irq_Thread(void* resource) {
 	int index1, index2;
 
 
-	
+
 
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
@@ -310,12 +310,12 @@ void *Timer_Irq_Thread(void* resource) {
 				T_desired[0] = sin(timeCounter*3)*1.5;
 				T_desired[1] = cos(timeCounter*3)*1.5;
 			} else if (timeCounter > 5.5 && timeCounter < 10) {
-				Phi_desired[2] = sin(timeCounter*2)*20;
+				Phi_desired[2] = sin(timeCounter*2)*25;
 			} else if (timeCounter > 10.5 && timeCounter < 15) {
 				T_desired[2] = sin(timeCounter)*1.5;
-			} else if (timeCounter > 15.5 && timeCounter < 20) { 
-				Phi_desired[0] = sin(timeCounter*2)*5;
-				Phi_desired[1] = cos(timeCounter*2)*5;
+			} else if (timeCounter > 15.5 && timeCounter < 20) {
+				Phi_desired[0] = sin(timeCounter*4)*10;
+				Phi_desired[1] = cos(timeCounter*4)*10;
 			} else {
 				for (i=0;i<3;i++){
 					T_desired[i] = 0;
@@ -323,7 +323,6 @@ void *Timer_Irq_Thread(void* resource) {
 				}
 			}
 
-			
 			timeCounter = timeCounter + TS;
 
 			NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
@@ -360,7 +359,7 @@ void *Timer_Irq_Thread(void* resource) {
 					angle1 = errorAngles[i][index1];
 					angle2 = errorAngles[i][index2];
 					correctionAngle[i] = ( correction1 + (Gamma[i] - angle1)*(correction2-correction1)/(angle2-angle1) );
-					Phi_desired[i] = -correctionAngle[i];
+					Phi_desired[i] = -correctionAngle[i] + Phi_desired[i];
 				}
 				}
 
