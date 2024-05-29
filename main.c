@@ -218,8 +218,8 @@ void *Timer_Irq_Thread(void* resource) {
 	double B[3][6] = {{4.3301, 0.0, -4.3301, -4.3301, 0.0, 4.3301},
 							{2.5, 5.0, 2.50, -2.50, -5.0, -2.50},
 							{0, 0, 0, 0, 0, 0}}; // base dimensions in base reference frame
-	double P[3][6] = {{2.5986, 1.7326, -4.3312, -4.3312, 1.7326, 2.5986},
-							{3.5010, 4.0010, 0.500, -0.50, -4.001, -3.5010},
+	double P[3][6] = {{2.5680, 1.4422, -4.0102, -4.0102, 1.4422, 2.5680},
+							{3.1479, 3.7979, 0.6500, -0.6500, -3.7979, -3.1479},
 							{0, 0, 0, 0, 0, 0}}; // platform dimensions in platform reference frame
 	const double servoRotationRange = 180; // degrees
 	const double alphaMax = *alpha0 + 0.5*servoRotationRange;
@@ -243,13 +243,15 @@ void *Timer_Irq_Thread(void* resource) {
 	NiFpga_Bool OnButton = NiFpga_False;
 	NiFpga_Bool OffButton = NiFpga_False;
 
+	int i; // for loop counter
+	double timeCounter = 0;
+
 	// low pass filter
 	int lowPass_ns = 1; // No. of biquad sections
 	double tau = 0.1; // time constant, s
 	double TS = 0.02; // sample time, s
 	double alphaTF = TS / (2*tau + TS);
     static struct biquad lowPass[3];
-	int i; // for loop counter
 	for (i = 0; i < 3; i++) {
 		(lowPass+i)->a0 = 1.000;
 		(lowPass+i)->a1 = (2*alphaTF - 1);
@@ -263,7 +265,22 @@ void *Timer_Irq_Thread(void* resource) {
 		(lowPass+i)->y1 = 0.000;
 		(lowPass+i)->y2 = 0.000;
 	}
+
+	// error correction variables
+	// box with spacer, box, two bars with spacer, two bars, 1 bar with spacer x rotation
+	// box with thick spacer, box with thin spacer, box, two bars and both spacers, two bars and thick spacer y rotation
+	double errorAngles[2][13] = {{-19.9258, -14.6775, -11.9199, -8.3617,-6.0934, 0, 0, 0, 6.0934, 8.3617, 11.9199, 14.6775, 19.9258},
+								{-16.9014, -14.3217, -11.2528, -8.8065, -6.8050, 0, 0, 0, 6.8050, 8.8065, 11.2528, 14.3217, 16.9014}};
+	double errorVector[2][13] = {{-2.7, -2.7, -2.6, -2.1, -1.7, 0, 0, 0, 1.1, 1.6, 2.2, 2.3, 2.5},
+								{-2.3, -2.1, -1.5, -1.4, -1.1, 0, 0, 0, 1.5, 1.9, 2.3, 2.3, 2.4}};
+	int errorLength = 12;
+	double correctionAngle[3] = {0, 0, 0};
+	double correction1, correction2, angle1, angle2;
+	int index1, index2;
+
+
 	
+
 
 	/* The While loop below will perform two tasks while waiting for a signal to stop---------------------------------------------------------------------
 	 *  - It will wait for the occurrence( or timeout) of the IRQ
@@ -288,6 +305,27 @@ void *Timer_Irq_Thread(void* resource) {
 		if (irqAssert) {
 			//Your Interrupt Service Code here-------------------------------------------------------------------------------------------------------------------
 
+			// run initial movement routine
+			if (timeCounter < 5) {
+				T_desired[0] = sin(timeCounter*3)*1.5;
+				T_desired[1] = cos(timeCounter*3)*1.5;
+			} else if (timeCounter > 5.5 && timeCounter < 10) {
+				Phi_desired[2] = sin(timeCounter*2)*20;
+			} else if (timeCounter > 10.5 && timeCounter < 15) {
+				T_desired[2] = sin(timeCounter)*1.5;
+			} else if (timeCounter > 15.5 && timeCounter < 20) { 
+				Phi_desired[0] = sin(timeCounter*2)*5;
+				Phi_desired[1] = cos(timeCounter*2)*5;
+			} else {
+				for (i=0;i<3;i++){
+					T_desired[i] = 0;
+					Phi_desired[i] = 0;
+				}
+			}
+
+			
+			timeCounter = timeCounter + TS;
+
 			NiFpga_WriteU32(myrio_session, IRQTIMERWRITE, timeoutValue);
 			NiFpga_WriteBool(myrio_session, IRQTIMERSETTIME, NiFpga_True);
 
@@ -302,13 +340,33 @@ void *Timer_Irq_Thread(void* resource) {
 											-180,
 											180);
 			}
-			
 
-			//Check to see if the platform is out of range or the platforms min/max settings
-				//If so, set the error flag to 1 and servo flag to 0
-				//If not continue
-			//Convert disturbance to correction translation and angles
-			baseToStaticPlatformPosition(T,Phi,D,Gamma,T_desired,Phi_desired,h0);
+			// Use error lookup table to add correction
+			for (i=0;i<2;i++) { // interpolate correction angle
+				if (Gamma[i] <= errorAngles[i][0] ){
+					correctionAngle[i] = errorVector[i][0];
+				} else if (Gamma[i] >= errorAngles[i][errorLength]){
+					correctionAngle[i] = errorVector[i][errorLength];
+				} else {
+					index1 = 0;
+					index2 = 1;
+					// calculate what 2 values it is between
+					while (!(Gamma[i] <= errorAngles[i][index2] && Gamma[i] >= errorAngles[i][index1])) {
+						index1++;
+						index2++;
+					}
+					correction1 = errorVector[i][index1];
+					correction2 = errorVector[i][index2];
+					angle1 = errorAngles[i][index1];
+					angle2 = errorAngles[i][index2];
+					correctionAngle[i] = ( correction1 + (Gamma[i] - angle1)*(correction2-correction1)/(angle2-angle1) );
+					Phi_desired[i] = -correctionAngle[i];
+				}
+				}
+
+
+			// Convert disturbance to correction translation and angles
+			baseToStaticPlatformPosition(T,Phi,D,GammaFiltered,T_desired,Phi_desired,h0);
 
 			// Calculate required leg lengths
 			ErrorFlag = GetLegLengths(P_base, l, legLengths, T, Phi, B, P, l_max, l_min);
@@ -331,6 +389,7 @@ void *Timer_Irq_Thread(void* resource) {
 			if(curr_state == Home) {
 				if(OnButton == 1 && ErrorFlag == 0 && OffButton == 0) {
 					curr_state = Responding;
+					timeCounter = 0;
 				} else if(ErrorFlag == 1 && OffButton == 0) {
 					curr_state = Error;
 				} else if(OffButton == 1 && PreviousOffButton != 1) {
@@ -363,7 +422,7 @@ void *Timer_Irq_Thread(void* resource) {
 			if(curr_state != Exxit) {
 				state_table[curr_state]();
 			}
-			
+
 			if (ArrayCounter < BUFLENGTH) {
 				gammaArrayX[ArrayCounter] = Gamma[0];
 				gammaArrayY[ArrayCounter] = Gamma[1];
@@ -386,7 +445,7 @@ void *Timer_Irq_Thread(void* resource) {
 				alphaArray4[ArrayCounter] = alpha[3];
 				alphaArray5[ArrayCounter] = alpha[4];
 				alphaArray6[ArrayCounter] = alpha[5];
-				
+
 				if (ErrorFlag == 1) {
 					outOfRange[ArrayCounter] = 1;
 				} else {
@@ -396,7 +455,7 @@ void *Timer_Irq_Thread(void* resource) {
 				PreviousOffButton = OffButton;
 				ArrayCounter++;
 			}
-			
+
 
 			//Acknowledge the interrupt-----------------------------------------------------------------------------------------------------------------------------
 			Irq_Acknowledge(irqAssert);

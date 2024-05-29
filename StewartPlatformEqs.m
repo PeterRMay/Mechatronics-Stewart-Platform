@@ -49,9 +49,9 @@ function errorFlag = StewartPlatformEqs(T,Phi, platformParams, plotBool, display
 %     for i = 1:6
 %         p(:,i) = rotz(defaultPlatformRotation) * p(:,i); % rotate top platform
 %     end
-    pradius = 4.36;
+    pradius = 8.125/2;
     p1 = [pradius;0;0];
-    offsetangle = asind(0.5/pradius);
+    offsetangle = asind((1.3/2)/pradius);
     p = zeros(3,6);
     pangles = [60-offsetangle,60+offsetangle,180-offsetangle,180+offsetangle,300-offsetangle,300+offsetangle];
     for i = 1:6
