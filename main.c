@@ -37,7 +37,7 @@ struct biquad {
     double x0; double x1; double x2; // input
     double y1; double y2; }; // output
 #define BUFLENGTH 3000 // 1 min of data at 50hz
-#define ALPHA0 17.1949 // home servo position
+#define ALPHA0 15.9587 // home servo position
 #define SATURATE(x,lo,hi) ((x) < (lo) ? (lo) : (x) > (hi) ? (hi) : (x)) // limits a signal to a low or high value
 
 
@@ -213,7 +213,7 @@ void *Timer_Irq_Thread(void* resource) {
 	const double a = 1.85;
 	const double l_max = s+a; // maximum extension of leg
 	const double l_min = s-a; // minimum extension of leg
-	const double h0 = 10.1980; // home height
+	const double h0 = 8.9943; // home height
 	double beta[6] = {270.0, 210.0, 30.0, 330.0, 150.0, 450.0};
 	double B[3][6] = {{4.3301, 0.0, -4.3301, -4.3301, 0.0, 4.3301},
 							{2.5, 5.0, 2.50, -2.50, -5.0, -2.50},
@@ -325,6 +325,7 @@ void *Timer_Irq_Thread(void* resource) {
 			}
 
 			// Use error lookup table to add correction
+			/* commented out until new data is collected
 			for (i=0;i<2;i++) { // interpolate correction angle
 				if (Gamma[i] <= errorAngles[i][0] ){
 					correctionAngle[i] = -errorVector[i][0];
@@ -345,10 +346,10 @@ void *Timer_Irq_Thread(void* resource) {
 					correctionAngle[i] = ( correction1 + (Gamma[i] - angle1)*(correction2-correction1)/(angle2-angle1) );
 					Phi_desired[i] = -correctionAngle[i];
 				}
-				}
+				}*/
 
 			// run initial movement routine
-						if (timeCounter < 20){
+						if (timeCounter < 1000){
 							if (timeCounter < 5) {
 								T_desired[0] = sin(timeCounter*3)*1.5;
 								T_desired[1] = cos(timeCounter*3)*1.5;
@@ -356,7 +357,7 @@ void *Timer_Irq_Thread(void* resource) {
 								Phi_desired[2] = sin(timeCounter*2)*25;
 							} else if (timeCounter > 10.5 && timeCounter < 15) {
 								T_desired[2] = sin(timeCounter)*1.5;
-							} else if (timeCounter > 15.5 && timeCounter < 20) {
+							} else if (timeCounter > 15.5 && timeCounter < 1000) {
 								Phi_desired[0] = sin(timeCounter*4)*10;
 								Phi_desired[1] = cos(timeCounter*4)*10;
 							} else {
@@ -404,7 +405,7 @@ void *Timer_Irq_Thread(void* resource) {
 			//Check for Responding State
 			if(curr_state == Responding) {
 				if (OnButton == 1 && timeCounter >= 1) {
-					timeCounter = 20;
+					timeCounter = 1000;
 					for (i=0;i<3;i++){
 														T_desired[i] = 0;
 														Phi_desired[i] = 0;
