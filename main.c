@@ -44,7 +44,7 @@ struct biquad {
 /* global variables */
 MyRio_Encoder encC0,encC1; //Declare all the encoder information
 static double ZeroAngles[] = { 0, 0, 0, 0, 0, 0 };
-static double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
+//static double DesiredAngles[] = { -90, -90, -90, -90, -90, -90 };
 static double alpha[6] = {0, 0, 0, 0, 0, 0};
 MyRio_Pwm pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2; //Declare all the PWM channels
 
@@ -66,9 +66,9 @@ double DegPerRev = 360;
 static double gammaArrayX[BUFLENGTH];
 static double gammaArrayY[BUFLENGTH];
 static double gammaArrayZ[BUFLENGTH];
-static double IMUArrayX[BUFLENGTH];
-static double IMUArrayY[BUFLENGTH];
-static double IMUArrayZ[BUFLENGTH];
+//static double IMUArrayX[BUFLENGTH];
+//static double IMUArrayY[BUFLENGTH];
+//static double IMUArrayZ[BUFLENGTH];
 static double TArrayX[BUFLENGTH];
 static double TArrayY[BUFLENGTH];
 static double TArrayZ[BUFLENGTH];
@@ -203,12 +203,12 @@ void *Timer_Irq_Thread(void* resource) {
 
 
 	//Declare all variables and constants for the interrupt-----------------------
-	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
+//	MyRio_Pwm PWM_Channels[] = { pwmA0, pwmA1, pwmA2, pwmB0, pwmB1, pwmB2 };
 
 	// Platform dimensions
-	const double radius = 5.0; // inches
-	const double angleBetweenServos = 60; // degrees
-	const double servoRotationOffset = 120; // degrees
+//	const double radius = 5.0; // inches
+//	const double angleBetweenServos = 60; // degrees
+//	const double servoRotationOffset = 120; // degrees
 	const double s = 10.0;
 	const double a = 2.0;
 	const double l_max = s+a; // maximum extension of leg
@@ -269,10 +269,12 @@ void *Timer_Irq_Thread(void* resource) {
 	// error correction variables
 	// box with spacer, box, two bars with spacer, two bars, 1 bar with spacer x rotation
 	// box with thick spacer, box with thin spacer, box, two bars and both spacers, two bars and thick spacer y rotation
-	double errorAngles[2][13] = {{-19.9258, -14.6775, -11.9199, -8.3617,-6.0934, 0, 0, 0, 6.0934, 8.3617, 11.9199, 14.6775, 19.9258},
-								{-16.9014, -14.3217, -11.2528, -8.8065, -6.8050, 0, 0, 0, 6.8050, 8.8065, 11.2528, 14.3217, 16.9014}};
-	double errorVector[2][13] = {{-2.7, -2.7, -2.6, -2.1, -1.7, 0, 0, 0, 1.1, 1.6, 2.2, 2.3, 2.5},
-								{-2.3, -2.1, -1.5, -1.4, -1.1, 0, 0, 0, 1.5, 1.9, 2.3, 2.3, 2.4}};
+	double errorAngles[2][13] = {{-16.9014, -14.3217, -11.2528, -8.8065, -6.8050, 0, 0, 0, 6.8050, 8.8065, 11.2528, 14.3217, 16.9014},
+			{-19.9258, -14.6775, -11.9199, -8.3617,-6.0934, 0, 0, 0, 6.0934, 8.3617, 11.9199, 14.6775, 19.9258}
+								};
+	double errorVector[2][13] = {{-2.3, -2.1, -1.5, -1.4, -1.1, 0, 0, 0, 1.5, 1.9, 2.3, 2.3, 2.4},
+			{-2.7, -2.7, -2.6, -2.1, -1.7, 0, 0, 0, 1.1, 1.6, 2.2, 2.3, 2.5}
+								};
 	int errorLength = 12;
 	double correctionAngle[3] = {0, 0, 0};
 	double correction1, correction2, angle1, angle2;
@@ -305,23 +307,7 @@ void *Timer_Irq_Thread(void* resource) {
 		if (irqAssert) {
 			//Your Interrupt Service Code here-------------------------------------------------------------------------------------------------------------------
 
-			// run initial movement routine
-			if (timeCounter < 5) {
-				T_desired[0] = sin(timeCounter*3)*1.5;
-				T_desired[1] = cos(timeCounter*3)*1.5;
-			} else if (timeCounter > 5.5 && timeCounter < 10) {
-				Phi_desired[2] = sin(timeCounter*2)*25;
-			} else if (timeCounter > 10.5 && timeCounter < 15) {
-				T_desired[2] = sin(timeCounter)*1.5;
-			} else if (timeCounter > 15.5 && timeCounter < 20) {
-				Phi_desired[0] = sin(timeCounter*4)*10;
-				Phi_desired[1] = cos(timeCounter*4)*10;
-			} else {
-				for (i=0;i<3;i++){
-					T_desired[i] = 0;
-					Phi_desired[i] = 0;
-				}
-			}
+
 
 			timeCounter = timeCounter + TS;
 
@@ -343,9 +329,9 @@ void *Timer_Irq_Thread(void* resource) {
 			// Use error lookup table to add correction
 			for (i=0;i<2;i++) { // interpolate correction angle
 				if (Gamma[i] <= errorAngles[i][0] ){
-					correctionAngle[i] = errorVector[i][0];
+					correctionAngle[i] = -errorVector[i][0];
 				} else if (Gamma[i] >= errorAngles[i][errorLength]){
-					correctionAngle[i] = errorVector[i][errorLength];
+					correctionAngle[i] = -errorVector[i][errorLength];
 				} else {
 					index1 = 0;
 					index2 = 1;
@@ -359,9 +345,29 @@ void *Timer_Irq_Thread(void* resource) {
 					angle1 = errorAngles[i][index1];
 					angle2 = errorAngles[i][index2];
 					correctionAngle[i] = ( correction1 + (Gamma[i] - angle1)*(correction2-correction1)/(angle2-angle1) );
-					Phi_desired[i] = -correctionAngle[i] + Phi_desired[i];
+					Phi_desired[i] = -correctionAngle[i];
 				}
 				}
+
+			// run initial movement routine
+						if (timeCounter < 1000){
+							if (timeCounter < 5) {
+								T_desired[0] = sin(timeCounter*3)*1.5;
+								T_desired[1] = cos(timeCounter*3)*1.5;
+							} else if (timeCounter > 5.5 && timeCounter < 10) {
+								Phi_desired[2] = sin(timeCounter*2)*25;
+							} else if (timeCounter > 10.5 && timeCounter < 15) {
+								T_desired[2] = sin(timeCounter)*1.5;
+							} else if (timeCounter > 15.5 && timeCounter < 1000) {
+								Phi_desired[0] = sin(timeCounter*4)*10;
+								Phi_desired[1] = cos(timeCounter*4)*10;
+							} else {
+								for (i=0;i<3;i++){
+									T_desired[i] = 0;
+									Phi_desired[i] = 0;
+								}
+							}
+						}
 
 
 			// Convert disturbance to correction translation and angles
@@ -399,6 +405,13 @@ void *Timer_Irq_Thread(void* resource) {
 
 			//Check for Responding State
 			if(curr_state == Responding) {
+				if (OnButton == 1 && timeCounter >= 1) {
+					timeCounter = 1000;
+					for (i=0;i<3;i++){
+														T_desired[i] = 0;
+														Phi_desired[i] = 0;
+					}
+				}
 				if(ErrorFlag == 1 && OffButton == 0) {
 					curr_state = Error;
 				} else if(OffButton == 1) {
